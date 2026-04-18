@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# 本地/密钥
+arknights_toolbox/config/config.local.json
+*.local.json
+*.local.yaml
+*.local.yml
+.env
+.env.*
+
+# 日志与运行时
+arknights_toolbox/log/
+*.log
+
+# IDE
+.idea/
+
+#解包/缓存的游戏数据时很大
+# zh_CN/gamedata/
+# *.pkl

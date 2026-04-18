@@ -1,0 +1,492 @@
+{
+  "cookies": "",
+  "schema": {
+    "character_table": {
+      "currentCharId": { "kind": "var", "type": "string", "required": true },
+      "charIdS": { "path": "charIdS", "type": "list[string]", "required": true },
+      "talent_phase": {
+        "path": "talent_phase",
+        "type": "string",
+        "enum": ["PHASE_0", "PHASE_1", "PHASE_2"]
+      }
+    }
+  },
+  "data_sources":{
+    "Kengxxiao/ArknightsGameData": [
+      {
+        "id": "character_table",
+        "type": "json",
+        "config": {
+          "file_path": "zh_CN/gamedata/excel/character_table.json",
+          "unpack_keys": false,
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "charIdS": "forKey",
+          "currentCharId": "",
+          "name": "{currentCharId}.name",
+          "appellation": "{currentCharId}.appellation",
+          "description": "{currentCharId}.description",
+          "profession": "{currentCharId}.profession",
+          "rarity": "{currentCharId}.rarity[-1:]",
+          "mainPower": "{currentCharId}.mainPower",
+          "position": "{currentCharId}.position",
+          "phases": "{currentCharId}.phases",
+          "skills": "{currentCharId}.skills",
+          "talents": "{currentCharId}.talents",
+          "talent_group_index": "",
+          "talent_candidate_index": "",
+          "talent_name": "{currentCharId}.talents[{talent_group_index}].candidates[{talent_candidate_index}].name",
+          "talent_phase": "{currentCharId}.talents[{talent_group_index}].candidates[{talent_candidate_index}].unlockCondition.phase",
+          "talent_required_potential": "{currentCharId}.talents[{talent_group_index}].candidates[{talent_candidate_index}].requiredPotentialRank",
+          "talent_description": "{currentCharId}.talents[{talent_group_index}].candidates[{talent_candidate_index}].description",
+          "favorKeyFrames": "{currentCharId}.favorKeyFrames",
+          "allSkillLvlup": "{currentCharId}.allSkillLvlup",
+          "potentialRanks": "{currentCharId}.potentialRanks",
+          "displayNumber": "{currentCharId}.displayNumber",
+          "tokenKey": "{currentCharId}.tokenKey",
+          "subProfessionId": "{currentCharId}.subProfessionId",
+          "maxPotentialLevel": "{currentCharId}.maxPotentialLevel",
+          "nationId": "{currentCharId}.nationId",
+          "groupId": "{currentCharId}.groupId",
+          "teamId": "{currentCharId}.teamId",
+          "tagList": "{currentCharId}.tagList",
+          "itemUsage": "{currentCharId}.itemUsage",
+          "itemDesc": "{currentCharId}.itemDesc",
+          "itemObtainApproach": "{currentCharId}.itemObtainApproach",
+          "isNotObtainable": "{currentCharId}.isNotObtainable",
+          "isSpChar": "{currentCharId}.isSpChar",
+          "maxLevel": "{currentCharId}.maxLevel",
+          "trait": "{currentCharId}.trait",
+          "rangeId": "{phases}[*].rangeId",
+          "attributesKeyFrames": "{phases}[*].attributesKeyFrames"
+        },
+        "value_maps": {
+          "phase": {
+            "0": "PHASE_0",
+            "1": "PHASE_1",
+            "2": "PHASE_2",
+            "PHASE_0": "PHASE_0",
+            "PHASE_1": "PHASE_1",
+            "PHASE_2": "PHASE_2"
+          }
+        },
+        "field_meta": {
+          "currentCharId": { "kind": "var", "type": "string", "required": true },
+          "charIdS": { "path": "charIdS", "type": "list[string]", "required": true },
+          "rarity": { "path": "rarity", "type": "string", "required": true },
+          "talent_phase": {
+            "path": "talent_phase",
+            "type": "string",
+            "enum": ["PHASE_0", "PHASE_1", "PHASE_2"]
+          }
+        }
+      },
+      {
+        "id": "handbook_team_table",
+        "type": "json",
+        "config": {
+          "file_path": "zh_CN/gamedata/excel/handbook_team_table.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "teams": "teams",
+          "nations": "nations",
+          "factions": "factions"
+        }
+      },
+      {
+        "id": "gamedata_const",
+        "type": "json",
+        "config": {
+          "file_path": "zh_CN/gamedata/excel/gamedata_const.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "richTextStyles": "richTextStyles",
+          "termDescriptionDict": "termDescriptionDict",
+          "gacha": "gacha",
+          "characterExpMap": "characterExpMap",
+          "skillExpMap": "skillExpMap"
+        }
+      },
+      {
+        "id": "uniequip_table",
+        "type": "json",
+        "config": {
+          "file_path": "zh_CN/gamedata/excel/uniequip_table.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "equipDict": "equipDict",
+          "missionList": "missionList",
+          "subProfDict": "subProfDict",
+          "subProfessionId": "",
+          "sub_profession_name": "subProfDict.{subProfessionId}.subProfessionName"
+        }
+      },
+      {
+        "id": "skill_table",
+        "type": "json",
+        "config": {
+          "file_path": "zh_CN/gamedata/excel/skill_table.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "levels": "levels",
+          "skill_name": "levels[0].name",
+          "skill_description": "levels[0].description",
+          "skill_icon": "iconId",
+          "skill_type": "skillType",
+          "skill_trigger_type": "levels[0].skillType",
+          "sp_type": "spData.spType",
+          "sp_cost": "spData.spCost",
+          "duration": "duration",
+          "max_charge_time": "spData.maxChargeTime",
+          "increment": "spData.increment"
+        },
+        "value_maps": {
+          "sp_type": {
+            "INCREASE_WITH_TIME": "自动回复",
+            "INCREASE_WHEN_ATTACK": "攻击回复",
+            "INCREASE_WHEN_TAKEN_DAMAGE": "受击回复",
+            "1": "自动回复",
+            "2": "攻击回复",
+            "4": "受击回复",
+            "8": "被动"
+          },
+          "skill_trigger_type": {
+            "PASSIVE": "被动",
+            "MANUAL": "手动触发",
+            "AUTO": "自动触发",
+            "0": "被动",
+            "1": "手动触发",
+            "2": "自动触发"
+          }
+        }
+      },
+      {
+        "id": "item_table",
+        "type": "json",
+        "config": {
+          "file_path": "zh_CN/gamedata/excel/item_table.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "items": "items",
+          "item_name": "items[item_id].name",
+          "item_description": "items[item_id].description",
+          "item_rarity": "items[item_id].rarity",
+          "item_icon": "items[item_id].iconId",
+          "item_usage": "items[item_id].itemUsage",
+          "item_type": "items[item_id].itemType",
+          "classify_type": "items[item_id].classifyType",
+          "stage_drop_list": "items[item_id].stageDropList"
+        }
+      },
+      {
+        "id": "building_data",
+        "type": "json",
+        "config": {
+          "file_path": "zh_CN/gamedata/excel/building_data.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "chars": "chars",
+          "buffChar": "buffChar",
+          "workshopFormulas": "workshopFormulas",
+          "manufactFormulas": "manufactFormulas"
+        }
+      },
+      {
+        "id": "skin_table",
+        "type": "json",
+        "config": {
+          "file_path": "zh_CN/gamedata/excel/skin_table.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "charSkins": "charSkins",
+          "buildinEvolveMap": "buildinEvolveMap",
+          "buildinPatchMap": "buildinPatchMap"
+        }
+      },
+      {
+        "id": "handbook_info_table",
+        "type": "json",
+        "config": {
+          "file_path": "zh_CN/gamedata/excel/handbook_info_table.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "handbookDict": "handbookDict",
+          "handbookDisplayConditions": "handbookDisplayConditions",
+          "handbookStageData": "handbookStageData",
+          "handbook_char_id": "",
+          "handbook_story_index": "",
+          "handbook_story_unlock_type": "handbookDict.{handbook_char_id}.storyTextAudio[{handbook_story_index}].stories[0].unLockType",
+          "handbook_story_text": "handbookDict.{handbook_char_id}.storyTextAudio[{handbook_story_index}].stories[0].storyText",
+          "handbook_story_unlock_param": "handbookDict.{handbook_char_id}.storyTextAudio[{handbook_story_index}].stories[0].unLockParam"
+        },
+        "value_maps": {
+          "handbook_story_unlock_type": {
+            "1": "DIRECT",
+            "2": "FAVOR",
+            "3": "AWAKE"
+          }
+        }
+      },
+      {
+        "id": "charword_table",
+        "type": "json",
+        "config": {
+          "file_path": "zh_CN/gamedata/excel/charword_table.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "charWords": "charWords",
+          "voiceLangDict": "voiceLangDict",
+          "wordlists": "wordlists"
+        }
+      }
+    ],
+    "yuanyan3060/ArknightsGameResource":[
+      {
+        "id": "character_table",
+        "type": "json",
+        "config": {
+          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/character_table.json",
+          "unpack_keys": false,
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "charIdS": "forKey",
+          "currentCharId": "",
+          "name": "{currentCharId}.name",
+          "appellation": "{currentCharId}.appellation",
+          "description": "{currentCharId}.description",
+          "profession": "{currentCharId}.profession",
+          "rarity": "{currentCharId}.rarity+1",
+          "mainPower": "{currentCharId}.mainPower",
+          "position": "{currentCharId}.position",
+          "phases": "{currentCharId}.phases",
+          "skills": "{currentCharId}.skills",
+          "talents": "{currentCharId}.talents",
+          "talent_group_index": "",
+          "talent_candidate_index": "",
+          "talent_name": "{currentCharId}.talents[{talent_group_index}].candidates[{talent_candidate_index}].name",
+          "talent_phase": "{currentCharId}.talents[{talent_group_index}].candidates[{talent_candidate_index}].unlockCondition.phase",
+          "talent_required_potential": "{currentCharId}.talents[{talent_group_index}].candidates[{talent_candidate_index}].requiredPotentialRank",
+          "talent_description": "{currentCharId}.talents[{talent_group_index}].candidates[{talent_candidate_index}].description",
+          "favorKeyFrames": "{currentCharId}.favorKeyFrames",
+          "allSkillLvlup": "{currentCharId}.allSkillLvlup",
+          "potentialRanks": "{currentCharId}.potentialRanks",
+          "displayNumber": "{currentCharId}.displayNumber",
+          "tokenKey": "{currentCharId}.tokenKey",
+          "subProfessionId": "{currentCharId}.subProfessionId",
+          "maxPotentialLevel": "{currentCharId}.maxPotentialLevel",
+          "nationId": "{currentCharId}.nationId",
+          "groupId": "{currentCharId}.groupId",
+          "teamId": "{currentCharId}.teamId",
+          "tagList": "{currentCharId}.tagList",
+          "itemUsage": "{currentCharId}.itemUsage",
+          "itemDesc": "{currentCharId}.itemDesc",
+          "itemObtainApproach": "{currentCharId}.itemObtainApproach",
+          "isNotObtainable": "{currentCharId}.isNotObtainable",
+          "isSpChar": "{currentCharId}.isSpChar",
+          "maxLevel": "{currentCharId}.maxLevel",
+          "trait": "{currentCharId}.trait",
+          "rangeId": "{phases}[*].rangeId",
+          "attributesKeyFrames": "{phases}[*].attributesKeyFrames"
+        },
+        "value_maps": {
+          "phase": {
+            "0": "PHASE_0",
+            "1": "PHASE_1",
+            "2": "PHASE_2",
+            "PHASE_0": "PHASE_0",
+            "PHASE_1": "PHASE_1",
+            "PHASE_2": "PHASE_2"
+          }
+        },
+        "field_meta": {
+          "currentCharId": { "kind": "var", "type": "string", "required": true },
+          "charIdS": { "path": "charIdS", "type": "list[string]", "required": true },
+          "rarity": { "path": "rarity", "type": "int", "required": true },
+          "talent_phase": {
+            "path": "talent_phase",
+            "type": "string",
+            "enum": ["PHASE_0", "PHASE_1", "PHASE_2"]
+          }
+        }
+      },
+      {
+        "id": "handbook_team_table",
+        "type": "json",
+        "config": {
+          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/handbook_team_table.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "teams": "teams",
+          "nations": "nations",
+          "factions": "factions"
+        }
+      },
+      {
+        "id": "gamedata_const",
+        "type": "json",
+        "config": {
+          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/gamedata_const.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "richTextStyles": "richTextStyles",
+          "termDescriptionDict": "termDescriptionDict",
+          "gacha": "gacha",
+          "characterExpMap": "characterExpMap",
+          "skillExpMap": "skillExpMap"
+        }
+      },
+      {
+        "id": "uniequip_table",
+        "type": "json",
+        "config": {
+          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/uniequip_table.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "equipDict": "equipDict",
+          "missionList": "missionList",
+          "subProfDict": "subProfDict",
+          "subProfessionId": "",
+          "sub_profession_name": "subProfDict.{subProfessionId}.subProfessionName"
+        }
+      },
+      {
+        "id": "skill_table",
+        "type": "json",
+        "config": {
+          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/skill_table.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "levels": "levels",
+          "skill_name": "levels[0].name",
+          "skill_description": "levels[0].description",
+          "skill_icon": "iconId",
+          "skill_type": "skillType",
+          "skill_trigger_type": "levels[0].skillType",
+          "sp_type": "spData.spType",
+          "sp_cost": "spData.spCost",
+          "duration": "duration",
+          "max_charge_time": "spData.maxChargeTime",
+          "increment": "spData.increment"
+        },
+        "value_maps": {
+          "sp_type": {
+            "INCREASE_WITH_TIME": "自动回复",
+            "INCREASE_WHEN_ATTACK": "攻击回复",
+            "INCREASE_WHEN_TAKEN_DAMAGE": "受击回复",
+            "1": "自动回复",
+            "2": "攻击回复",
+            "4": "受击回复",
+            "8": "被动"
+          },
+          "skill_trigger_type": {
+            "PASSIVE": "被动",
+            "MANUAL": "手动触发",
+            "AUTO": "自动触发",
+            "0": "被动",
+            "1": "手动触发",
+            "2": "自动触发"
+          }
+        }
+      },
+      {
+        "id": "item_table",
+        "type": "json",
+        "config": {
+          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/item_table.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "items": "items",
+          "item_name": "items[item_id].name",
+          "item_description": "items[item_id].description",
+          "item_rarity": "items[item_id].rarity",
+          "item_icon": "items[item_id].iconId",
+          "item_usage": "items[item_id].itemUsage",
+          "item_type": "items[item_id].itemType",
+          "classify_type": "items[item_id].classifyType",
+          "stage_drop_list": "items[item_id].stageDropList"
+        }
+      },
+      {
+        "id": "building_data",
+        "type": "json",
+        "config": {
+          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/building_data.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "chars": "chars",
+          "buffChar": "buffChar",
+          "workshopFormulas": "workshopFormulas",
+          "manufactFormulas": "manufactFormulas"
+        }
+      },
+      {
+        "id": "skin_table",
+        "type": "json",
+        "config": {
+          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/skin_table.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "charSkins": "charSkins",
+          "buildinEvolveMap": "buildinEvolveMap",
+          "buildinPatchMap": "buildinPatchMap"
+        }
+      },
+      {
+        "id": "handbook_info_table",
+        "type": "json",
+        "config": {
+          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/handbook_info_table.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "handbookDict": "handbookDict",
+          "handbookDisplayConditions": "handbookDisplayConditions",
+          "handbookStageData": "handbookStageData",
+          "handbook_char_id": "",
+          "handbook_story_index": "",
+          "handbook_story_unlock_type": "handbookDict.{handbook_char_id}.storyTextAudio[{handbook_story_index}].stories[0].unLockType",
+          "handbook_story_text": "handbookDict.{handbook_char_id}.storyTextAudio[{handbook_story_index}].stories[0].storyText",
+          "handbook_story_unlock_param": "handbookDict.{handbook_char_id}.storyTextAudio[{handbook_story_index}].stories[0].unLockParam"
+        },
+        "value_maps": {
+          "handbook_story_unlock_type": {
+            "1": "DIRECT",
+            "2": "FAVOR",
+            "3": "AWAKE"
+          }
+        }
+      },
+      {
+        "id": "charword_table",
+        "type": "json",
+        "config": {
+          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/charword_table.json",
+          "encoding": "utf-8"
+        },
+        "field_mappings": {
+          "charWords": "charWords",
+          "voiceLangDict": "voiceLangDict",
+          "wordlists": "wordlists"
+        }
+      }
+    ]
+  }
+}

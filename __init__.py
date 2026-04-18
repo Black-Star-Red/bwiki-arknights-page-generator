@@ -1,0 +1,2 @@
+"""Arknights toolbox package."""
+
