@@ -110,82 +110,89 @@ def fetch_character_supplementary_data(
 
     side_story = None
     release_time = None
-    while len(result.keys()) != character_num:
-        if dynamics:
-            diag["pages"] += 1
-            items_page = dynamics.get("items") or []
-            diag["items_total"] += len(items_page)
-            for item in items_page:
-                try:
-                    data = item["modules"][1]["module_desc"]["rich_text_nodes"]
-                    photo_url = item["modules"][2]["module_dynamic"]["dyn_draw"]["items"][0]["src"]
-                    for index, node in enumerate(data):
-                        text = node["orig_text"]
-                        if side_story is None and re.match(r"SideStory「(.*)」", text):
-                            side_story = text[text.find("「") + 1 : text.find("」")]
-                        if announce_line_re.match(text):
-                            character: dict[str, str] = {}
-                            gacha_pool = text[text.find("【") + 1 : text.find("】")]
-                            start = text.find("//")
-                            end = text.find("\n", start)
-                            name = text[start + 2 : end]
-                            photo_path = operator_photo_dir() / f"{name}.jpg"
-                            if not photo_path.exists():
-                                photo = requests.get(photo_url, timeout=10)
-                                photo_path.parent.mkdir(parents=True, exist_ok=True)
-                                if photo.status_code == 200:
-                                    photo_path.write_bytes(photo.content)
-                            try:
-                                character["专精"] = ocr_specialization(str(photo_path))
-                            except Exception:
-                                character["专精"] = ""
-                                log_warning("专精OCR失败，已降级为空 name=%s", name)
-                            print(character)
-                            implementation_data = pool_view.get(gacha_pool)
-                            if implementation_data is not None:
-                                if implementation_data[1] and implementation_data[1][0] == "0":
-                                    implementation_data[1] = implementation_data[1][1:]
-                                release_time = implementation_data[1]
-                                if acquisition_method.get(implementation_data[0]) is not None:
-                                    if len(data) > index + 1:
-                                        split_index = data[index + 1]["orig_text"].rfind("/")
-                                        character["动态id"] = data[index + 1]["orig_text"][split_index + 1 :]
-                                        character["获取途径"] = (
-                                            acquisition_method.get(implementation_data[0], "")
-                                            + f"{gacha_pool}】限定寻访"
-                                        )
-                                    else:
-                                        character["获取途径"] = acquisition_method.get("新增干员", "标准寻访")
-                            else:
-                                if gacha_pool == "活动奖励干员":
-                                    character["获取途径"] = acquisition_method.get(gacha_pool, "") + (side_story or "") + "】活动获取"
+    while len(result.keys()) < character_num:
+        if not dynamics:
+            break
+        diag["pages"] += 1
+        items_page = dynamics.get("items") or []
+        diag["items_total"] += len(items_page)
+        for item in items_page:
+            try:
+                data = item["modules"][1]["module_desc"]["rich_text_nodes"]
+                photo_url = item["modules"][2]["module_dynamic"]["dyn_draw"]["items"][0]["src"]
+                for index, node in enumerate(data):
+                    text = node["orig_text"]
+                    if side_story is None and re.match(r"SideStory「(.*)」", text):
+                        side_story = text[text.find("「") + 1 : text.find("」")]
+                    if announce_line_re.match(text):
+                        character: dict[str, str] = {}
+                        gacha_pool = text[text.find("【") + 1 : text.find("】")]
+                        start = text.find("//")
+                        end = text.find("\n", start)
+                        name = text[start + 2 : end]
+                        photo_path = operator_photo_dir() / f"{name}.jpg"
+                        if not photo_path.exists():
+                            photo = requests.get(photo_url, timeout=10)
+                            photo_path.parent.mkdir(parents=True, exist_ok=True)
+                            if photo.status_code == 200:
+                                photo_path.write_bytes(photo.content)
+                        try:
+                            character["专精"] = ocr_specialization(str(photo_path))
+                        except Exception:
+                            character["专精"] = ""
+                            log_warning("专精OCR失败，已降级为空 name=%s", name)
+                        print(character)
+                        implementation_data = pool_view.get(gacha_pool)
+                        if implementation_data is not None:
+                            if implementation_data[1] and implementation_data[1][0] == "0":
+                                implementation_data[1] = implementation_data[1][1:]
+                            release_time = implementation_data[1]
+                            if acquisition_method.get(implementation_data[0]) is not None:
+                                if len(data) > index + 1:
+                                    split_index = data[index + 1]["orig_text"].rfind("/")
+                                    character["动态id"] = data[index + 1]["orig_text"][split_index + 1 :]
+                                    character["获取途径"] = (
+                                        acquisition_method.get(implementation_data[0], "")
+                                        + f"{gacha_pool}】限定寻访"
+                                    )
                                 else:
-                                    character["获取途径"] = acquisition_method.get(gacha_pool, "标准寻访")
-                            if release_time:
-                                character["实装日期"] = (
-                                    "[https://t.bilibili.com/"
-                                    + item["id_str"]
-                                    + "?spm_id_from=333.1387.0.0 "
-                                    + release_time
-                                    + "]"
-                                )
+                                    character["获取途径"] = acquisition_method.get("新增干员", "标准寻访")
+                        else:
+                            if gacha_pool == "活动奖励干员":
+                                character["获取途径"] = acquisition_method.get(gacha_pool, "") + (side_story or "") + "】活动获取"
                             else:
-                                character["实装日期"] = (
-                                    "[https://t.bilibili.com/"
-                                    + item["id_str"]
-                                    + "?spm_id_from=333.1387.0.0 "
-                                    + datetime.now().strftime("%Y年%m月%d日")
-                                    + "]"
-                                )
-                            intro = text[text.rfind("_") + 2 :].rstrip("\n")
-                            intro = intro.replace("\n", "<br/>\n")
-                            character["宣传介绍"] = intro
-                            result[name] = character
-                except Exception:
-                    diag["skipped_exceptions"] += 1
-                    continue
-            offset = dynamics["offset"]
-            dynamics = fetch_user_dynamics(mid, headers, offset)
+                                character["获取途径"] = acquisition_method.get(gacha_pool, "标准寻访")
+                        if release_time:
+                            character["实装日期"] = (
+                                "[https://t.bilibili.com/"
+                                + item["id_str"]
+                                + "?spm_id_from=333.1387.0.0 "
+                                + release_time
+                                + "]"
+                            )
+                        else:
+                            character["实装日期"] = (
+                                "[https://t.bilibili.com/"
+                                + item["id_str"]
+                                + "?spm_id_from=333.1387.0.0 "
+                                + datetime.now().strftime("%Y年%m月%d日")
+                                + "]"
+                            )
+                        intro = text[text.rfind("_") + 2 :].rstrip("\n")
+                        intro = intro.replace("\n", "<br/>\n")
+                        character["宣传介绍"] = intro
+                        result[name] = character
+                        if len(result) >= character_num:
+                            break
+            except Exception:
+                diag["skipped_exceptions"] += 1
+                if len(result) >= character_num:
+                    break
+                continue
+        offset = dynamics.get("offset")
+        if not offset:
+            break
+        dynamics = fetch_user_dynamics(mid, headers, offset)
     log_info("result:%s", result)
     if not result:
         log_warning(
