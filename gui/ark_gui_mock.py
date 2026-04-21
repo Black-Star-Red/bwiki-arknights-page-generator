@@ -2,17 +2,18 @@
 Arknights 数据工具 — PySide6 界面（配置路径、数据源、Wiki 选项、运行、结果区）
 
 
-运行: python Gui/ark_gui_mock.py（启动时会 chdir 到 ArknightsGameData 根目录，与在终端先 cd 再跑脚本一致）
+运行: python Gui/ark_gui_mock.py
 依赖: pip install PySide6
 """
 from __future__ import annotations
 
-import importlib.util
 import os
 import sys
 import threading
 import traceback
 from pathlib import Path
+
+from arknights_toolbox.core.legacy_api import run_legacy_pipeline
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
 from PySide6.QtWidgets import (
@@ -33,6 +34,8 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QVBoxLayout,
     QWidget,
+    QSpinBox,
+    QFormLayout,
 )
 
 
@@ -131,6 +134,7 @@ class OperatorRunThread(QThread):
         wiki_bridge: WikiConfirmBridge | None,
         quiet: bool,
         wiki_use_test_page: bool,
+        character_num: int,
     ) -> None:
         super().__init__()
         self._config_path = config_path
@@ -139,29 +143,15 @@ class OperatorRunThread(QThread):
         self._wiki_bridge = wiki_bridge
         self._quiet = quiet
         self._wiki_use_test_page = wiki_use_test_page
-
+        self._character_num = character_num
     def run(self) -> None:
-        root = _project_root()
-        rs = str(root)
-        if rs not in sys.path:
-            sys.path.insert(0, rs)
+        # _project_root() = .../arknights_toolbox；import arknights_toolbox 需要仓库根在 sys.path
+        pkg_root = _project_root()
+        repo_root = str(pkg_root.parent)
+        if repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
 
         try:
-            script_path = root / "core" / "干员脚本2.0.py"
-            if not script_path.is_file():
-                self.failed.emit(f"未找到脚本: {script_path}\n请在 arknights_toolbox 目录下启动 GUI。")
-                return
-            spec = importlib.util.spec_from_file_location("ark_operator_script_new", script_path)
-            if spec is None or spec.loader is None:
-                self.failed.emit("无法创建模块 spec")
-                return
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            run_fn = getattr(mod, "run_character_pipeline", None)
-            if run_fn is None:
-                self.failed.emit("干员脚本中缺少 run_character_pipeline")
-                return
-
             wiki_confirm = None
             bridge = self._wiki_bridge
             if bridge is not None:
@@ -169,7 +159,7 @@ class OperatorRunThread(QThread):
                 def wiki_confirm(prompt: str, wiki_key: str) -> bool:
                     return bridge.ask_blocking(prompt, wiki_key)
 
-            tpl = run_fn(
+            tpl = run_legacy_pipeline(
                 config_path=self._config_path,
                 data_source_group=self._data_source,
                 wiki_flags=dict(self._wiki_flags),
@@ -180,6 +170,7 @@ class OperatorRunThread(QThread):
                 interactive=False,
                 wiki_use_test_page=self._wiki_use_test_page,
                 wiki_confirm=wiki_confirm,
+                character_num=self._character_num,
             )
             self.succeeded.emit(tpl or "")
         except BaseException as e:
@@ -207,9 +198,15 @@ class ArknightsToolWindow(QWidget):
 
         self.chk_wiki_test_page = QCheckBox("Wiki 沙盒（写入「用户:…/测试页」，取消则写入正式词条）")
         self.chk_wiki_test_page.setChecked(True)
+        self.form_layout = QFormLayout()
+        self.chk_character_num = QSpinBox()
+        self.chk_character_num.setRange(1, 100)
+        self.chk_character_num.setValue(3)
+        self.chk_character_num.setSuffix(" 个干员")
+        self.form_layout.addRow("选择干员数量(按实装顺序)", self.chk_character_num)
         row_left_check = QHBoxLayout()
         row_left_check.addWidget(self.chk_wiki_test_page)
-
+        row_left_check.addLayout(self.form_layout)
         row_cfg = QHBoxLayout()
         row_cfg.addWidget(QLabel("配置文件"))
         row_cfg.addWidget(self.edit_config, stretch=1)
@@ -355,6 +352,7 @@ class ArknightsToolWindow(QWidget):
         flags = self.wiki_flags()
         quiet = self.log_quiet()
         wiki_sandbox = self.chk_wiki_test_page.isChecked()
+        character_num = self.chk_character_num.value()
         self._show_result_text(
             "—— 运行中 ——\n"
             f"配置: {cfg}\n"
@@ -363,6 +361,7 @@ class ArknightsToolWindow(QWidget):
             f"Wiki(非交互): 干员页={flags['wiki_operator_page']} "
             f"语音页={flags['wiki_voice_page']} 半身像={flags['wiki_portrait']}\n"
             f"Wiki 写入目标: {'沙盒测试页' if wiki_sandbox else '正式词条标题'}\n"
+            f"选择干员数量: {character_num} 个\n"
             "写入 Wiki 前将弹出二次确认（主线程对话框）。\n\n"
             "日志写入项目目录下 debug.log …\n",
             fallback_tab_title="运行状态",
@@ -376,6 +375,7 @@ class ArknightsToolWindow(QWidget):
             wiki_bridge=self._wiki_bridge,
             quiet=quiet,
             wiki_use_test_page=wiki_sandbox,
+            character_num=character_num,
         )
         self._run_thread.succeeded.connect(self._on_run_succeeded)
         self._run_thread.failed.connect(self._on_run_failed)
@@ -406,8 +406,8 @@ class ArknightsToolWindow(QWidget):
 
 
 def main() -> None:
-    # 干员脚本里大量使用 ./photo、相对路径写 debug.log 等；GUI 若从 IDE/快捷方式启动，cwd 往往不是项目根，
-    # 会导致写图失败、整段 try/except 跳过，表现为「终端能跑通、GUI 无输出」。
+    # 干员脚本会按「含 arknights_toolbox/log 的目录」解析工程根；B 站配图写入 arknights_toolbox/photo/。
+    # GUI 若从 IDE/快捷方式启动 cwd 不一致时，这里切到包目录，避免日志与路径解析跑偏。
     try:
         os.chdir(_project_root())
     except OSError:

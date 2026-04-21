@@ -7,7 +7,7 @@ import os
 import re
 from pathlib import Path
 from .sources import ApiDataSource, FileDataSource, JsonDataSource
-
+from contextlib import contextmanager
 
 class DataMapper:
     """数据映射器，负责统一访问不同数据源。"""
@@ -418,6 +418,66 @@ class DataMapper:
             self.data_cache.pop(source_id, None)
         else:
             self.data_cache.clear()
+
+    def _install_data_sources_group(self, group_key):
+        """Install a data source group without interactive prompts."""
+        data_sources = self.config.get("data_sources", {}) or {}
+        if group_key not in data_sources:
+            raise ValueError(f"Unknown data source group: {group_key}")
+
+        self.current_data_sources = group_key
+        self.sources = {}
+        self.data_cache = {}
+        self.mappings = {}
+        self.value_maps = {}
+        self.field_meta = {}
+
+        for source_config in data_sources[group_key]:
+            source_id = source_config["id"]
+            source_type = source_config["type"]
+
+            if source_type == "json":
+                self.sources[source_id] = JsonDataSource()
+            elif source_type == "api":
+                self.sources[source_id] = ApiDataSource()
+            elif source_type == "file":
+                self.sources[source_id] = FileDataSource()
+            else:
+                raise ValueError(f"Unsupported data source type: {source_type}")
+
+            self.mappings[source_id] = source_config.get("field_mappings", {})
+            self.value_maps[source_id] = source_config.get("value_maps", {})
+            self.field_meta[source_id] = source_config.get("field_meta", {})
+
+    @contextmanager
+    def temporary_source_group(self, group_key):
+        """
+        Temporarily switch to another configured source group.
+
+        The previous mapper state (group, mappings and caches) will be restored
+        after leaving the context.
+        """
+        prev_group = self.current_data_sources
+        prev_requested = self._requested_data_source_group
+        prev_sources = self.sources
+        prev_cache = self.data_cache
+        prev_mappings = self.mappings
+        prev_value_maps = self.value_maps
+        prev_field_meta = self.field_meta
+
+        # Temporarily disable fixed-group selection to allow explicit switch.
+        self._requested_data_source_group = None
+        self._install_data_sources_group(group_key)
+        try:
+            yield
+        finally:
+            self.current_data_sources = prev_group
+            self._requested_data_source_group = prev_requested
+            self.sources = prev_sources
+            self.data_cache = prev_cache
+            self.mappings = prev_mappings
+            self.value_maps = prev_value_maps
+            self.field_meta = prev_field_meta
 
     def add_mapping(self, source_id, field_name, field_path):
         if source_id not in self.mappings:
