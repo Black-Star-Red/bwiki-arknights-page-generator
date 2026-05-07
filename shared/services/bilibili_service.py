@@ -8,8 +8,56 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
-
+from bs4 import BeautifulSoup
+import json
 import requests
+def slice_json_object_after_key(text: str, key: str = "initialData") -> dict:
+    # 常见：\"initialData\":{  或  "initialData":{
+    markers = [f'\\"{key}\\":{{', f'"{key}":{{']
+    start_brace = -1
+    for m in markers:
+        pos = text.find(m)
+        if pos != -1:
+            start_brace = text.find("{", pos)
+            break
+    if start_brace == -1:
+        # 兜底：只找 key，再找后面第一个 {
+        pos = text.find(key)
+        if pos == -1:
+            raise ValueError(f"找不到 {key}")
+        start_brace = text.find("{", pos)
+    if start_brace == -1:
+        raise ValueError(f"{key} 后没有 {{")
+    depth = 0
+    for i in range(start_brace, len(text)):
+        c = text[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                blob = text[start_brace : i + 1]
+                return json.loads(blob)
+    raise ValueError("括号不配对，可能截断了")
+def get_dynamic_id(name:str):
+    response = requests.get("https://ak.hypergryph.com/archive/dynamicCompile")
+    if response.status_code == 200:
+        soup = BeautifulSoup(response.content, "html.parser")
+        scripts = [
+            s.string
+            for s in soup.find_all("script")
+            if s.string and "__next_f.push" in s.string and "initialData" in s.string
+        ]
+        # 用法：scripts[0] 是整段 script 字符串（str），不是 BeautifulSoup 节点的话要 .string
+        text =scripts[0].replace("\\","")
+        print(text)
+        text = text if isinstance(text, str) else text.string
+        data = slice_json_object_after_key(text)
+        print(data.keys())
+        for i in data["0"]["list"]:
+            if i["name"]==name:
+                return i["cid"]
+        return ""
 
 
 def _toolbox_package_root() -> Path:
@@ -122,8 +170,12 @@ def fetch_character_supplementary_data(
                 photo_url = item["modules"][2]["module_dynamic"]["dyn_draw"]["items"][0]["src"]
                 for index, node in enumerate(data):
                     text = node["orig_text"]
-                    if side_story is None and re.match(r"SideStory「(.*)」", text):
-                        side_story = text[text.find("「") + 1 : text.find("」")]
+                    if side_story is None:
+                        m = re.match(r"SideStory「([^」]+)」", text)
+                        if m is None:
+                            m = re.search(r"主题曲「([^」]+)」", text)
+                        if m:
+                            side_story = m.group(0)
                     if announce_line_re.match(text):
                         character: dict[str, str] = {}
                         gacha_pool = text[text.find("【") + 1 : text.find("】")]
@@ -136,11 +188,12 @@ def fetch_character_supplementary_data(
                             photo_path.parent.mkdir(parents=True, exist_ok=True)
                             if photo.status_code == 200:
                                 photo_path.write_bytes(photo.content)
-                        try:
-                            character["专精"] = ocr_specialization(str(photo_path))
-                        except Exception:
-                            character["专精"] = ""
-                            log_warning("专精OCR失败，已降级为空 name=%s", name)
+                        # try:
+                        #     character["专精"] = ocr_specialization(str(photo_path))
+                        # except Exception:
+                        #     character["专精"] = ""
+                        #     log_warning("专精OCR失败，已降级为空 name=%s", name)
+                        character["专精"] = ""
                         print(character)
                         implementation_data = pool_view.get(gacha_pool)
                         if implementation_data is not None:
@@ -148,9 +201,10 @@ def fetch_character_supplementary_data(
                                 implementation_data[1] = implementation_data[1][1:]
                             release_time = implementation_data[1]
                             if acquisition_method.get(implementation_data[0]) is not None:
-                                if len(data) > index + 1:
-                                    split_index = data[index + 1]["orig_text"].rfind("/")
-                                    character["动态id"] = data[index + 1]["orig_text"][split_index + 1 :]
+                                dynamic_id  = get_dynamic_id(name)
+                                if dynamic_id != "":
+                                    character["动态id"] = dynamic_id
+
                                     character["获取途径"] = (
                                         acquisition_method.get(implementation_data[0], "")
                                         + f"{gacha_pool}】限定寻访"
@@ -159,7 +213,13 @@ def fetch_character_supplementary_data(
                                     character["获取途径"] = acquisition_method.get("新增干员", "标准寻访")
                         else:
                             if gacha_pool == "活动奖励干员":
-                                character["获取途径"] = acquisition_method.get(gacha_pool, "") + (side_story or "") + "】活动获取"
+                                if "主题曲" in side_story:
+                                    character["获取途径"]= "主题曲获得 / "
+                                else:
+                                    l = side_story.find("「")
+                                    r = side_story.rfind("」")
+                                    character["获取途径"] = acquisition_method.get(gacha_pool, "") + (side_story[l+1:r] or "") + "】活动获取"
+
                             else:
                                 character["获取途径"] = acquisition_method.get(gacha_pool, "标准寻访")
                         if release_time:
@@ -180,7 +240,7 @@ def fetch_character_supplementary_data(
                             )
                         intro = text[text.rfind("_") + 2 :].rstrip("\n")
                         intro = intro.replace("\n", "<br/>\n")
-                        character["宣传介绍"] = intro
+                        character["宣传介绍"] = intro.replace("<br/>\n<br/>\n关注并转发本条动态，我们将抽取10位博士赠送【现金648元】一份。","")
                         result[name] = character
                         if len(result) >= character_num:
                             break

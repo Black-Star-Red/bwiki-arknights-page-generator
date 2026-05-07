@@ -130,6 +130,8 @@ class OperatorRunThread(QThread):
         *,
         config_path: str,
         data_source: str,
+        operator_filter: str | None,
+        summon_charid: str | None,
         wiki_flags: dict,
         wiki_bridge: WikiConfirmBridge | None,
         quiet: bool,
@@ -139,6 +141,8 @@ class OperatorRunThread(QThread):
         super().__init__()
         self._config_path = config_path
         self._data_source = data_source
+        self._operator_filter = operator_filter
+        self._summon_charid = summon_charid
         self._wiki_flags = wiki_flags
         self._wiki_bridge = wiki_bridge
         self._quiet = quiet
@@ -162,6 +166,7 @@ class OperatorRunThread(QThread):
             tpl = run_legacy_pipeline(
                 config_path=self._config_path,
                 data_source_group=self._data_source,
+                operator_filter=self._operator_filter,
                 wiki_flags=dict(self._wiki_flags),
                 voice_json={},
                 log_path=None,
@@ -171,6 +176,7 @@ class OperatorRunThread(QThread):
                 wiki_use_test_page=self._wiki_use_test_page,
                 wiki_confirm=wiki_confirm,
                 character_num=self._character_num,
+                summon_charid=self._summon_charid,
             )
             self.succeeded.emit(tpl or "")
         except BaseException as e:
@@ -204,6 +210,12 @@ class ArknightsToolWindow(QWidget):
         self.chk_character_num.setValue(3)
         self.chk_character_num.setSuffix(" 个干员")
         self.form_layout.addRow("选择干员数量(按实装顺序)", self.chk_character_num)
+        self.edit_operator_filter = QLineEdit()
+        self.edit_operator_filter.setPlaceholderText("可选：输入干员名或 charId（留空=按数量批量）")
+        self.form_layout.addRow("指定干员", self.edit_operator_filter)
+        self.edit_summon_charid = QLineEdit()
+        self.edit_summon_charid.setPlaceholderText("可选：输入附属单位 charId（overrideTokenKey）")
+        self.form_layout.addRow("附属模板(charId)", self.edit_summon_charid)
         row_left_check = QHBoxLayout()
         row_left_check.addWidget(self.chk_wiki_test_page)
         row_left_check.addLayout(self.form_layout)
@@ -349,6 +361,8 @@ class ArknightsToolWindow(QWidget):
             return
 
         src = self.combo_source.currentText()
+        operator_filter = self.edit_operator_filter.text().strip() or None
+        summon_charid = self.edit_summon_charid.text().strip() or None
         flags = self.wiki_flags()
         quiet = self.log_quiet()
         wiki_sandbox = self.chk_wiki_test_page.isChecked()
@@ -357,6 +371,8 @@ class ArknightsToolWindow(QWidget):
             "—— 运行中 ——\n"
             f"配置: {cfg}\n"
             f"数据源: {src}\n"
+            f"指定干员: {operator_filter or '未指定（按数量批量）'}\n"
+            f"附属模板(charId): {summon_charid or '未指定'}\n"
             f"日志模式: {'普通(quiet=True)' if quiet else '调试(quiet=False)'}\n"
             f"Wiki(非交互): 干员页={flags['wiki_operator_page']} "
             f"语音页={flags['wiki_voice_page']} 半身像={flags['wiki_portrait']}\n"
@@ -371,6 +387,8 @@ class ArknightsToolWindow(QWidget):
         self._run_thread = OperatorRunThread(
             config_path=cfg,
             data_source=src,
+            operator_filter=operator_filter,
+            summon_charid=summon_charid,
             wiki_flags=flags,
             wiki_bridge=self._wiki_bridge,
             quiet=quiet,

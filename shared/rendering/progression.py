@@ -139,15 +139,17 @@ def LevelUPEnhance(mapper, star, phase):
 def render_operator_progression_fields(mapper, star):
     """
     渲染干员晋升与面板成长字段，返回可直接 append/extend 的模板行列表。
+
+    一星、二星与 B 站 Wiki「一星干员」标准模板一致：无精英段时精一「等级需求 / 提升 / 材料」
+    留空（不填 phase0.maxLevel）；精一满级面板与精二整块仍按 phases 是否存在输出。
     """
     lines: list[str] = []
+    try:
+        star_n = int(star)
+    except (TypeError, ValueError):
+        digits = "".join(c for c in str(star) if c.isdigit())
+        star_n = int(digits[-1]) if digits else 1
     phases0_data = mapper.get_data_safe("character_table", "{phases}[0].attributesKeyFrames[0].data")
-    lines.append(f"|初始生命={phases0_data.get('maxHp', '') if phases0_data else ''}")
-    lines.append(f"|初始攻击={phases0_data.get('atk', '') if phases0_data else ''}")
-    lines.append(f"|初始防御={phases0_data.get('def', '') if phases0_data else ''}")
-    lines.append(f"|初始法抗={int(phases0_data.get('magicResistance', 0)) if phases0_data else ''}")
-    lines.append(f"|再部署={phases0_data.get('respawnTime', '') if phases0_data else ''}")
-    lines.append(f"|部署费用={phases0_data.get('cost', '') if phases0_data else ''}")
     rdcCost = 0
     potential_ranks = mapper.get_data_safe("character_table", "potentialRanks")
     if potential_ranks:
@@ -156,7 +158,7 @@ def render_operator_progression_fields(mapper, star):
                 rdcCost += 1
     costPro = None
     zudang = None
-    if int(star) >= 4:
+    if star_n >= 4:
         phase_data = mapper.get_data_safe("character_table", "{phases}[*].attributesKeyFrames[1].data")
         costPro = phase_data[2].get("cost", 0) - rdcCost if phase_data[2] else 0
         phases_data = []
@@ -164,22 +166,29 @@ def render_operator_progression_fields(mapper, star):
             if phase_data:
                 phases_data.append(str(phase_data[i].get("blockCnt", 0)))
         zudang = "→".join(phases_data)
-    elif int(star) == 3:
+    elif star_n == 3:
         phase_data = mapper.get_data_safe("character_table", "{phases}[*].attributesKeyFrames[1].data")
-        costPro = phase_data[1].get("cost", 0) - rdcCost if phase_data[1] else 0
+        costPro = phase_data[1].get("cost", 0) - rdcCost if phase_data and len(phase_data) > 1 else 0
         phases_data = []
         for i in range(2):
-            if phase_data:
-                phases_data.append(str(phase_data.get("blockCnt", 0)))
+            if phase_data and i < len(phase_data) and isinstance(phase_data[i], dict):
+                phases_data.append(str(phase_data[i].get("blockCnt", 0)))
         zudang = "→".join(phases_data)
-    elif int(star) < 3:
+    elif star_n < 3:
         phases0_max_data = mapper.get_data_safe("character_table", "{phases}[0].attributesKeyFrames[1].data")
         costPro = phases0_max_data.get("cost", 0) - rdcCost if phases0_max_data else 0
         phases_data = []
         if phases0_max_data:
             phases_data.append(str(phases0_max_data.get("blockCnt", 0)))
         zudang = "→".join(phases_data)
+    lines.append(f"|初始生命={phases0_data.get('maxHp', '') if phases0_data else ''}")
+    lines.append(f"|初始攻击={phases0_data.get('atk', '') if phases0_data else ''}")
+    lines.append(f"|初始防御={phases0_data.get('def', '') if phases0_data else ''}")
+    lines.append(f"|初始法抗={int(phases0_data.get('magicResistance', 0)) if phases0_data else ''}")
+    lines.append(f"|初始攻击范围={mapper.get_data_safe('character_table', 'rangeId')[0]}")
 
+    lines.append(f"|再部署={phases0_data.get('respawnTime', '') if phases0_data else ''}")
+    lines.append(f"|部署费用={phases0_data.get('cost', '') if phases0_data else ''}")
     lines.append(f"|完美部署费用={costPro}<!-- 计算精二满潜费用 -->")
     lines.append(f"|阻挡数={zudang}")
     attack_speed = phases0_data.get("attackSpeed", 0) if phases0_data else 0
@@ -188,25 +197,30 @@ def render_operator_progression_fields(mapper, star):
     lines.append(f"|攻击速度={attack_speed}<!-- 写攻击速度的值 -->")
     lines.append(f"|攻击间隔={phases0_data.get('baseAttackTime', '') if phases0_data else ''}<!-- 写攻击间隔的值 -->")
     lines.append("|bb备注=")
-    lines.append(f"|初始攻击范围={mapper.get_data_safe('character_table', 'rangeId')[0]}")
+
 
     phases0_max_data = mapper.get_data_safe("character_table", "{phases}[0].attributesKeyFrames[1].data")
     lines.append(f"|初始生命max={phases0_max_data.get('maxHp', '') if phases0_max_data else ''}")
     lines.append(f"|初始攻击max={phases0_max_data.get('atk', '') if phases0_max_data else ''}")
     lines.append(f"|初始防御max={phases0_max_data.get('def', '') if phases0_max_data else ''}")
     lines.append(f"|初始法抗max={int(phases0_max_data.get('magicResistance', 0)) if phases0_max_data else ''}")
-    lines.append(f"|精1等级需求={mapper.get_data_safe('character_table', '{phases}[0].maxLevel')}")
-    lines.append(f"|精1提升={LevelUPEnhance(mapper, star, 1)}")
-    lines.append(f"|精1材料={Material(mapper, '{phases}', star, 1)}")
+    if star_n < 3:
+        lines.append("|精1等级需求=")
+        lines.append("|精1提升=")
+        lines.append("|精1材料=")
+    else:
+        lines.append(f"|精1等级需求={mapper.get_data_safe('character_table', '{phases}[0].maxLevel')}")
+        lines.append(f"|精1提升={LevelUPEnhance(mapper, star, 1)}")
+        lines.append(f"|精1材料={Material(mapper, '{phases}', star, 1)}")
 
-    phases1_max_data = mapper.get_data_safe("character_table", "{phases}[1].attributesKeyFrames[1].data") if int(star) > 2 else None
+    phases1_max_data = mapper.get_data_safe("character_table", "{phases}[1].attributesKeyFrames[1].data") if star_n > 2 else None
     lines.append(f"|精1生命max={phases1_max_data.get('maxHp', '') if phases1_max_data else ''}")
     lines.append(f"|精1攻击max={phases1_max_data.get('atk', '') if phases1_max_data else ''}")
     lines.append(f"|精1防御max={phases1_max_data.get('def', '') if phases1_max_data else ''}")
     lines.append(f"|精1法抗max={int(phases1_max_data.get('magicResistance', 0)) if phases1_max_data else ''}")
     lines.append(f"|精1攻击范围={mapper.get_data_safe('character_table', 'rangeId')[1] if phases1_max_data else ''}")
 
-    phases2_max_data = mapper.get_data_safe("character_table", "{phases}[2].attributesKeyFrames[1].data") if int(star) > 3 else None
+    phases2_max_data = mapper.get_data_safe("character_table", "{phases}[2].attributesKeyFrames[1].data") if star_n > 3 else None
     lines.append(f"|精2等级需求={mapper.get_data_safe('character_table', '{phases}[1].maxLevel') if phases2_max_data else ''}")
     lines.append(f"|精2提升={LevelUPEnhance(mapper, star, 2)}")
     lines.append(f"|精2材料={Material(mapper, '{phases}', star, 2)}")

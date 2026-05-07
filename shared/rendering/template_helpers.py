@@ -70,5 +70,8 @@ def resolve_drawer_with_fallback(mapper, char_id):
                 break
     return drawer
 
-
-__all__ = ["render_skill_materials", "build_drawer_from_skins", "resolve_drawer_with_fallback"]
+__all__ = [
+    "render_skill_materials",
+    "build_drawer_from_skins",
+    "resolve_drawer_with_fallback",
+]

@@ -55,7 +55,8 @@ def render_operator_talent_fields(
             lines.append(
                 f"|天赋{i}{f'第{j}次' if j > 1 else ''}{'提升后' if j >= 1 else ''}描述={talent_description if is_not_none else ''}"
             )
-        lines.append(f"|天赋{i}备注=")
+            if j == 0:
+                lines.append(f"|天赋{i}备注=")
         lines.append(f"|天赋{i}攻击范围=")
     return lines
 

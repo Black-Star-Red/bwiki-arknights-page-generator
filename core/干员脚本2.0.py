@@ -430,6 +430,159 @@ def _current_character_row(mapper):
     return table.get(cid)
 
 
+def _collect_cid_name_pairs(mapper) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    for cid in mapper.get_data("character_table", "charIdS"):
+        _set_current_char_id(mapper, cid)
+        nm = mapper.get_data_safe("character_table", "name")
+        if nm:
+            pairs.append((str(cid), str(nm)))
+    return pairs
+
+
+def _resolve_operator_char_id(mapper, selected: str) -> str | None:
+    selected = (selected or "").strip().lower()
+    if not selected:
+        return None
+    for cid, name in _collect_cid_name_pairs(mapper):
+        if selected == cid.lower() or selected == name.lower() or selected in name.lower():
+            return cid
+    return None
+
+
+def _resolve_summon_target_by_charid(mapper, summon_charid: str):
+    """通过附属单位 charId(overrideTokenKey) 反查所属干员与召唤物信息。"""
+    def _collect_token_keys(raw_value) -> list[str]:
+        keys: list[str] = []
+        if isinstance(raw_value, str):
+            if raw_value.strip():
+                keys.append(raw_value.strip())
+            return keys
+        if isinstance(raw_value, list):
+            for item in raw_value:
+                keys.extend(_collect_token_keys(item))
+            return keys
+        if isinstance(raw_value, dict):
+            for v in raw_value.values():
+                keys.extend(_collect_token_keys(v))
+            return keys
+        return keys
+
+    selected = (summon_charid or "").strip()
+    if not selected:
+        return None
+    selected_lower = selected.lower()
+    char_table = mapper.get_data("character_table")
+    if not isinstance(char_table, dict):
+        return None
+    for owner_cid, owner_row in char_table.items():
+        if not isinstance(owner_row, dict):
+            continue
+        owner_name = owner_row.get("name") or owner_cid
+        owner_star = owner_row.get("rarity", 0)
+        trait = owner_row.get("trait")
+        if isinstance(trait, dict):
+            trait_candidates = trait.get("candidates", [])
+        else:
+            trait_candidates = []
+        rich_styles = mapper.get_data_safe("gamedata_const", "richTextStyles")
+        term_descriptionDict = mapper.get_data_safe("gamedata_const", "termDescriptionDict")
+        term_index_cache = {}
+        skills = owner_row.get("skills") or []
+        token_candidates: list[str] = []
+        # 1) 技能显式挂接的 overrideTokenKey
+        for skill in skills:
+            token_key = (skill or {}).get("overrideTokenKey")
+            token_key_str = (token_key or "").strip()
+            if token_key_str:
+                token_candidates.append(token_key_str)
+        # 2) 干员本体 tokenKey 字段（部分附属单位不走 overrideTokenKey）
+        token_candidates.extend(_collect_token_keys(owner_row.get("tokenKey")))
+
+        seen_keys: set[str] = set()
+        for token_key_str in token_candidates:
+            if token_key_str in seen_keys:
+                continue
+            seen_keys.add(token_key_str)
+            summon_name_str = (
+                mapper.get_data_safe("character_table", f"{token_key_str}.name")
+                if token_key_str
+                else ""
+            )
+            summon_name_str = (summon_name_str or "").strip()
+            if not token_key_str:
+                continue
+            if token_key_str.lower() == selected_lower or summon_name_str.lower() == selected_lower:
+                return (
+                    owner_name,
+                    owner_star,
+                    trait_candidates,
+                    rich_styles,
+                    term_descriptionDict,
+                    token_key_str,
+                    summon_name_str or token_key_str,
+                    term_index_cache,
+                )
+    # 兜底：若传入 charId 本身存在于 character_table，仍允许直接生成附属模板
+    summon_row = char_table.get(selected)
+    if not summon_row:
+        for key in char_table.keys():
+            if str(key).lower() == selected_lower:
+                summon_row = char_table.get(key)
+                selected = str(key)
+                break
+    if isinstance(summon_row, dict):
+        rich_styles = mapper.get_data_safe("gamedata_const", "richTextStyles")
+        term_descriptionDict = mapper.get_data_safe("gamedata_const", "termDescriptionDict")
+        summon_name = summon_row.get("name") or selected
+        return (
+            "",
+            0,
+            [],
+            rich_styles,
+            term_descriptionDict,
+            selected,
+            summon_name,
+            {},
+        )
+    return None
+
+
+def generate_summon_template_by_charid(mapper, charid: str) -> str:
+    """按附属单位 charId(overrideTokenKey) 输出 {{干员附带单位}} 模板。"""
+    resolved = _resolve_summon_target_by_charid(mapper, charid)
+    if resolved is None:
+        log_warning("未匹配到附属单位 charId：%s", charid)
+        return ""
+    (
+        owner_name,
+        owner_star,
+        trait_candidates,
+        rich_styles,
+        term_descriptionDict,
+        summon_key,
+        summon_name,
+        term_index_cache,
+    ) = resolved
+
+    lines = render_summon_template_lines(
+        mapper,
+        summon_key,
+        summon_name,
+        owner_name,
+        owner_star,
+        trait_candidates,
+        rich_styles,
+        term_descriptionDict,
+        position,
+        mapping_skill_type,
+        skillType,
+        skillTriggerType,
+        term_index_cache,
+    )
+    return f"【{summon_name}】\n" + "\n".join(lines)
+
+
 def create_site_page(site, page_name, page_content, wiki_use_test_page: bool = True):
     """写入 Wiki 页面。wiki_use_test_page 为真时写入当前用户沙盒页，避免误改正式词条。"""
     write_site_page(
@@ -444,6 +597,7 @@ def create_site_page(site, page_name, page_content, wiki_use_test_page: bool = T
 def generate_template(
     voice_json,
     mapper,
+    operator_filter: str | None = None,
     wiki_flags=None,
     interactive: bool = True,
     wiki_use_test_page: bool = True,
@@ -466,9 +620,10 @@ def generate_template(
     site_headers = build_wiki_headers()
     # 数据一律经 mapper 按需读取，避免整表硬编码路径散落
     # 获取 charId：从 voice_json 任意条目读取
-    supplementary_data=None
-    if voice_json == {}:
-        supplementary_data=get_character_supplementary_data(mid,headers,character_num)
+    selected = (operator_filter or "").strip()
+    supplementary_data = None
+    if voice_json == {} and not selected:
+        supplementary_data = get_character_supplementary_data(mid, headers, character_num)
         # raise ValueError("voice_json 为空，请先在脚本里手动设定语音 JSON。")
     else:
         print()
@@ -476,13 +631,33 @@ def generate_template(
     parts = []
     # 每位干员的模板预览（干员页 + 语音）；避免后续 parts.clear() 导致 GUI/CLI 得到空串
     gui_operator_outputs: list[tuple[str, str]] = []
-    name_set = set(supplementary_data.keys()) if supplementary_data else set()
     name_view = {}
-    for cid in mapper.get_data("character_table", "charIdS"):
-        _set_current_char_id(mapper, cid)
-        nm = mapper.get_data_safe("character_table", "name")
-        if nm in name_set:
-            name_view[nm] = cid
+    cid_name_pairs = _collect_cid_name_pairs(mapper)
+    for cid, nm in cid_name_pairs:
+        name_view[nm] = cid
+
+    if selected:
+        selected_lower = selected.lower()
+        matched_names = []
+        for cid, name in cid_name_pairs:
+            if name.lower() == selected_lower or selected_lower in name.lower() or cid.lower() == selected_lower:
+                matched_names.append(name)
+        if not matched_names:
+            log_warning("未匹配到指定干员：%s（支持干员名/charId）", selected)
+            return ""
+        # 指定干员时跳过 B 站补充请求，直接生成模板（补充字段用本地默认值兜底）。
+        supplementary_data = {
+            name: {
+                "获取途径": "",
+                "实装日期": "",
+                "动态id": "",
+                "专精": "",
+                "宣传介绍": "",
+            }
+            for name in matched_names
+        }
+    elif supplementary_data:
+        supplementary_data = {name: value for name, value in supplementary_data.items() if name in name_view}
 
 
     pool = requests.Session()
@@ -530,56 +705,86 @@ def generate_template(
             Id = found_cid
             parts.append("{{干员")
             parts.append(f"|干员代号={name}")
-
-            if value.get('动态id') is not None:
-                parts.append(f"|角标=限")
-                parts.append(f"|解限=否")
-            if "活动获取" in value.get("获取途径"):
-                parts.append(f"|角标=活")
             parts.append(f"|背景=")
+            parts.append(f"|实装日期={value.get('实装日期', '')}")
+            parts.append(f"|charId={Id}")
+            label=[]
+
+            obtain = value.get("获取途径") or ""
+            if "活动获取" in obtain or "活动获得" in obtain:
+                label.append("活")
+            elif "主题曲" in obtain:
+                label.append("主")
+
             alter_operator = ""
+            char_name=""
             char_id_str = str(Id).split("_")
             for cid in mapper.get_data("character_table", "charIdS"):
-
-                if str(cid).startswith("char") and cid != Id and char_id_str[-1][:-1] in cid:
+                char_name = mapper.get_data_safe("character_table", f"{cid}.name")
+                if (char_name != name and char_name in name) or (
+                    str(cid).startswith("char") and cid != Id and char_id_str[-1][:-1] in cid
+                ):
                     alter_operator = cid
                     break
-            if alter_operator != "":
-                parts.append(f"|角标=异")
-            parts.append(f"|实装日期={value["实装日期"]}")
-            parts.append(f"|charId={Id}")
-            parts.append(f"|异格干员={alter_operator}")
-            parts.append(f"|英文名={mapper.get_data_safe('character_table', f'appellation')}")
-            parts.append(f"|职业={profession.get(mapper.get_data_safe('character_table', f'profession'))}")
-            star = mapper.get_data_safe('character_table', f'rarity')
+            if alter_operator:
+                label.append("异")
+            if value.get("动态id"):
+                label.insert(0,"限定")
+                parts.append("|角标="+"、".join(label))
+                parts.append("|解限=否")
+            elif label is not None:
+                parts.append("|角标="+"、".join(label))
+            if alter_operator:
+                parts.append(f"|异格干员={alter_operator}")
+                parts.insert(0,"{{多义词|同义名="+f"{char_name}"+"|说明=是"+f"{char_name}"+"的异格干员}}")
+            parts.append(f"|英文名={mapper.get_data_safe('character_table', 'appellation') or ''}")
+            parts.append(f"|职业={profession.get(mapper.get_data_safe('character_table', 'profession'))}")
+            star = mapper.get_data_safe("character_table", "rarity")
             parts.append(f"|星级={star}")
-            print(star)
-            parts.append(f"|干员编号={mapper.get_data_safe('character_table', f'displayNumber')}<!-- 类似B101格式的编号 -->")
-            item =[]
-            main_power = mapper.get_data_safe('character_table', f'mainPower')
+            parts.append(f"|干员编号={mapper.get_data_safe('character_table', 'displayNumber')}<!-- 类似B101格式的编号 -->")
+            item = []
+            main_power = mapper.get_data_safe("character_table", "mainPower")
             if main_power:
                 for i in main_power.values():
-                    if i != None:
+                    if i is not None:
                         item.append(i)
-            parts.append(f"|阵营={'、'.join(mapper.get_data_safe("handbook_team_table",f"{i}.powerName") for i in item)}<!-- 有多少写多少，顿号隔开 -->")
-            parts.append(f"|副阵营=")
-            label=[]
-            label.append(position.get(mapper.get_data_safe('character_table', f'position')))
-            tag_list = mapper.get_data_safe('character_table', f'tagList')
+            parts.append(
+                f"|阵营={'、'.join(mapper.get_data_safe('handbook_team_table', f'{i}.powerName') for i in item)}<!-- 有多少写多少，顿号隔开 -->"
+            )
+            item.clear()
+            subpower = mapper.get_data_safe("character_table", "subPower")
+            if subpower:
+                for i in subpower:
+                    for j in i.values():
+                        if j is not None:
+                            item.append(j)
+            parts.append(f"|副阵营={'、'.join(mapper.get_data_safe('handbook_team_table', f'{i}.powerName') for i in item)}")
+            label = []
+            pos_label = position.get(mapper.get_data_safe("character_table", "position"))
+            if pos_label:
+                label.append(pos_label)
+            tag_list = mapper.get_data_safe("character_table", "tagList")
             if tag_list:
                 for i in tag_list:
                     label.append(i)
-            parts.append(f"|标签={"、".join(i for i in label)}<!-- 包括近战位/远程位，然后抄tag参数，顿号隔开 -->")
-            parts.append(f"|获取途径={value["获取途径"]}")
-            trait = mapper.get_data_safe('character_table', f'trait')
+            parts.append(
+                f"|标签={'、'.join(i for i in label if i)}<!-- 包括近战位/远程位，然后抄tag参数，顿号隔开 -->"
+            )
+            parts.append(f"|获取途径={obtain}")
+            trait = mapper.get_data_safe("character_table", "trait")
             if isinstance(trait, dict):
-                trait_candidates = trait.get('candidates', [])
+                trait_candidates = trait.get("candidates", [])
             else:
                 trait_candidates = []
-            rich_styles = mapper.get_data_safe("gamedata_const",'richTextStyles')
-            term_descriptionDict = mapper.get_data_safe("gamedata_const",'termDescriptionDict')
+            rich_styles = mapper.get_data_safe("gamedata_const", "richTextStyles")
+            term_descriptionDict = mapper.get_data_safe("gamedata_const", "termDescriptionDict")
             term_index_cache = {}
-            feature = process_description(mapper.get_data_safe('character_table', f'description'),trait_candidates,rich_styles,term_descriptionDict)
+            feature = process_description(
+                        mapper.get_data_safe("character_table", "description"),
+                        trait_candidates,
+                        rich_styles,
+                        term_descriptionDict,
+                    )
             parts.append(f"|特性={feature}")
             parts.append(f"|特性攻击范围=")
             parts.append(f"|分支={subProf(mapper, mapper.get_data_safe('character_table', f'subProfessionId'))}")
@@ -599,9 +804,10 @@ def generate_template(
             #         Data_temp['respawnTime']=data_temp['level']
             #         Data_temp['respawnTime']=data_temp['level']
 
+            # 面板与晋升：三星以下与 Wiki「一星干员」模板一致（无精英时精一需求/提升/材料留空）
             parts.extend(render_operator_progression_fields(mapper, star))
 
-            parts.append(f"|精二动态id="+ (value["动态id"] if value.get('动态id') is not None else ""))
+            parts.append(f"|精二动态id={value['动态id'] if value.get('动态id') else ''}")
 
             levelUpCost = mapper.get_data_safe('character_table', '{skills}[*].levelUpCostCond')
             for i in range(1,4):
@@ -962,6 +1168,7 @@ def run_character_pipeline(
     *,
     config_path: str,
     data_source_group: str | None,
+    operator_filter: str | None = None,
     wiki_flags: dict | None,
     voice_json=None,
     log_path=None,
@@ -971,6 +1178,7 @@ def run_character_pipeline(
     wiki_use_test_page: bool = True,
     wiki_confirm: Callable[[str, str], bool] | None = None,
     character_num: int = 3,
+    summon_charid: str | None = None,
 ) -> str:
     """
     供 GUI 与 CLI 共用的执行入口：配置日志 → DataMapper → generate_template。
@@ -1003,15 +1211,19 @@ def run_character_pipeline(
 
     try:
         script_log.info("stage_start run_id=%s stage=generate_template", run_id)
-        tpl = generate_template(
-            voice_json,
-            mapper,
-            wiki_flags=wiki_flags,
-            interactive=interactive,
-            wiki_use_test_page=wiki_use_test_page,
-            wiki_confirm=wiki_confirm,
-            character_num=character_num,
-        )
+        if summon_charid:
+            tpl = generate_summon_template_by_charid(mapper, summon_charid)
+        else:
+            tpl = generate_template(
+                voice_json,
+                mapper,
+                operator_filter=operator_filter,
+                wiki_flags=wiki_flags,
+                interactive=interactive,
+                wiki_use_test_page=wiki_use_test_page,
+                wiki_confirm=wiki_confirm,
+                character_num=character_num,
+            )
         script_log.info("stage_end run_id=%s stage=generate_template output_len=%d", run_id, len(tpl or ""))
         return tpl or ""
     except Exception:
@@ -1036,6 +1248,16 @@ def main():
         "--data-source",
         default=None,
         help="config.data_sources 顶层键，如 Kengxxiao/ArknightsGameData；省略时交互终端下标选择，非 tty 取第一项",
+    )
+    parser.add_argument(
+        "--operator",
+        default=None,
+        help="仅生成指定干员（支持干员名或 charId）",
+    )
+    parser.add_argument(
+        "--summon-charid",
+        default=None,
+        help="仅生成指定附属单位模板（传附属单位 charId / overrideTokenKey）",
     )
     parser.add_argument("--out", "-o", default=None, help="输出文件路径（若不指定则打印到 stdout）")
     parser.add_argument(
@@ -1103,6 +1325,7 @@ def main():
         tpl = run_character_pipeline(
             config_path=args.config,
             data_source_group=args.data_source,
+            operator_filter=args.operator,
             wiki_flags=wiki_flags,
             voice_json=voice_json,
             log_path=args.log_file,
@@ -1110,6 +1333,7 @@ def main():
             quiet=args.quiet,
             interactive=not args.no_interactive,
             wiki_use_test_page=args.wiki_use_test_page,
+            summon_charid=args.summon_charid,
         )
     except Exception:
         sys.exit(1)

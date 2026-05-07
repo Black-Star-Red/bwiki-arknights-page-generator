@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arknights-toolbox"
+version = "0.0.0"
+description = "用于自动生成明日方舟 Bwiki 页面内容的工具链"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[tool.setuptools]
+packages = [
+    "arknights_toolbox",
+    "arknights_toolbox.app",
+    "arknights_toolbox.core",
+    "arknights_toolbox.core.use_cases",
+    "arknights_toolbox.data",
+    "arknights_toolbox.data.sources",
+    "arknights_toolbox.gui",
+    "arknights_toolbox.shared",
+    "arknights_toolbox.shared.globals",
+    "arknights_toolbox.shared.rendering",
+    "arknights_toolbox.shared.services",
+    "arknights_toolbox.shared.utils",
+]
+
+[tool.setuptools.package-dir]
+"arknights_toolbox" = "."
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+# 未执行 pip install -e . 时，仍可通过「仓库父目录」解析 import arknights_toolbox
+pythonpath = [".."]

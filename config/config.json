@@ -11,6 +11,10 @@
       }
     }
   },
+  "data_source_roots": {
+    "Kengxxiao/ArknightsGameData": "../ArknightsData/ArknightsGameData",
+    "yuanyan3060/ArknightsGameResource": "../ArknightsData/ArknightsGameResource"
+  },
   "data_sources":{
     "Kengxxiao/ArknightsGameData": [
       {
@@ -30,6 +34,7 @@
           "profession": "{currentCharId}.profession",
           "rarity": "{currentCharId}.rarity[-1:]",
           "mainPower": "{currentCharId}.mainPower",
+          "subPower": "{currentCharId}.subPower",
           "position": "{currentCharId}.position",
           "phases": "{currentCharId}.phases",
           "skills": "{currentCharId}.skills",
@@ -255,7 +260,7 @@
         "id": "character_table",
         "type": "json",
         "config": {
-          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/character_table.json",
+          "file_path": "gamedata/excel/character_table.json",
           "unpack_keys": false,
           "encoding": "utf-8"
         },
@@ -268,6 +273,7 @@
           "profession": "{currentCharId}.profession",
           "rarity": "{currentCharId}.rarity+1",
           "mainPower": "{currentCharId}.mainPower",
+          "subPower": "{currentCharId}.subPower",
           "position": "{currentCharId}.position",
           "phases": "{currentCharId}.phases",
           "skills": "{currentCharId}.skills",
@@ -324,7 +330,7 @@
         "id": "handbook_team_table",
         "type": "json",
         "config": {
-          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/handbook_team_table.json",
+          "file_path": "gamedata/excel/handbook_team_table.json",
           "encoding": "utf-8"
         },
         "field_mappings": {
@@ -337,7 +343,7 @@
         "id": "gamedata_const",
         "type": "json",
         "config": {
-          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/gamedata_const.json",
+          "file_path": "gamedata/excel/gamedata_const.json",
           "encoding": "utf-8"
         },
         "field_mappings": {
@@ -352,7 +358,7 @@
         "id": "uniequip_table",
         "type": "json",
         "config": {
-          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/uniequip_table.json",
+          "file_path": "gamedata/excel/uniequip_table.json",
           "encoding": "utf-8"
         },
         "field_mappings": {
@@ -367,7 +373,7 @@
         "id": "skill_table",
         "type": "json",
         "config": {
-          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/skill_table.json",
+          "file_path": "gamedata/excel/skill_table.json",
           "encoding": "utf-8"
         },
         "field_mappings": {
@@ -407,7 +413,7 @@
         "id": "item_table",
         "type": "json",
         "config": {
-          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/item_table.json",
+          "file_path": "gamedata/excel/item_table.json",
           "encoding": "utf-8"
         },
         "field_mappings": {
@@ -426,7 +432,7 @@
         "id": "building_data",
         "type": "json",
         "config": {
-          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/building_data.json",
+          "file_path": "gamedata/excel/building_data.json",
           "encoding": "utf-8"
         },
         "field_mappings": {
@@ -440,7 +446,7 @@
         "id": "skin_table",
         "type": "json",
         "config": {
-          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/skin_table.json",
+          "file_path": "gamedata/excel/skin_table.json",
           "encoding": "utf-8"
         },
         "field_mappings": {
@@ -453,7 +459,7 @@
         "id": "handbook_info_table",
         "type": "json",
         "config": {
-          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/handbook_info_table.json",
+          "file_path": "gamedata/excel/handbook_info_table.json",
           "encoding": "utf-8"
         },
         "field_mappings": {
@@ -478,7 +484,7 @@
         "id": "charword_table",
         "type": "json",
         "config": {
-          "file_path": "../ArknightsGameData2/ArknightsGameResource/gamedata/excel/charword_table.json",
+          "file_path": "gamedata/excel/charword_table.json",
           "encoding": "utf-8"
         },
         "field_mappings": {

@@ -2,19 +2,31 @@
 
 from __future__ import annotations
 
+# 与 B 站方舟 Wiki 常见一星干员页一致：中文 CV 在前，日配次之
+_CV_FIELD_SPECS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("CV中", ("CN_MANDARIN", "CHINESE", "CHINESE_MAINLAND")),
+    ("CV", ("JP",)),
+    ("CV英", ("ENGLISH", "EN_US", "EN_GB")),
+    ("CV韩", ("KOREAN", "KR")),
+    ("CV方", ("CUSTOM", "CN_TOPOLECT", "LINKAGE", "REGIONAL")),
+)
+
 
 def render_operator_cv_fields(mapper, char_id):
-    """干员CV模板"""
+    """干员CV模板（固定顺序：CV中 → CV → CV英 → CV韩 → CV方）。"""
     lines: list[str] = []
-    map_language = {}
-    for language, language_name in (mapper.get_data_safe("charword_table", "voiceLangTypeDict") or {}).items():
-        if language == "JP":
-            map_language["JP"] = ""
-            continue
-        type_name = language_name["name"][0] if language_name["name"] != "中文-方言" else "方"
-        map_language[language] = type_name
-    for language, cv in (mapper.get_data_safe("charword_table", f"voiceLangDict.{char_id}.dict") or {}).items():
-        lines.append(f"|CV{map_language[language]}={'，'.join([cv_name for cv_name in cv['cvName']])}")
+    voice_dict = mapper.get_data_safe("charword_table", f"voiceLangDict.{char_id}.dict") or {}
+    for field, lang_keys in _CV_FIELD_SPECS:
+        text = ""
+        for lang in lang_keys:
+            entry = voice_dict.get(lang)
+            if not entry:
+                continue
+            names = entry.get("cvName") or []
+            if names:
+                text = "，".join(str(n) for n in names)
+                break
+        lines.append(f"|{field}={text}")
     return lines
 
 

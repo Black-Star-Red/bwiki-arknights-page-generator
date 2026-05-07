@@ -150,6 +150,19 @@ class DataMapper:
 
         if self.current_data_sources is None:
             raise ValueError("没有可用的数据源")
+        root_map = self.config.get("data_source_roots", {})
+        self.current_data_root = root_map.get(self.current_data_sources)
+
+        # 每个数据源组写入各自的 data_root，便于 temporary_source_group 切换后路径仍正确
+        for group_key, group_sources in data_sources.items():
+            group_root = root_map.get(group_key)
+            for source_config in group_sources:
+                if source_config.get("type") != "json":
+                    continue
+                runtime_cfg = dict(source_config.get("config", {}))
+                if group_root and "data_root" not in runtime_cfg:
+                    runtime_cfg["data_root"] = group_root
+                source_config["config"] = runtime_cfg
 
         for source_config in data_sources[self.current_data_sources]:
             source_id = source_config["id"]
@@ -163,6 +176,11 @@ class DataMapper:
                 self.sources[source_id] = FileDataSource()
             else:
                 raise ValueError(f"Unsupported data source type: {source_type}")
+
+            runtime_cfg = dict(source_config.get("config", {}))
+            if source_type == "json" and self.current_data_root and "data_root" not in runtime_cfg:
+                runtime_cfg["data_root"] = self.current_data_root
+            source_config["config"] = runtime_cfg
 
             self.mappings[source_id] = source_config.get("field_mappings", {})
             self.value_maps[source_id] = source_config.get("value_maps", {})
@@ -426,6 +444,8 @@ class DataMapper:
             raise ValueError(f"Unknown data source group: {group_key}")
 
         self.current_data_sources = group_key
+        root_map = self.config.get("data_source_roots", {}) or {}
+        self.current_data_root = root_map.get(group_key)
         self.sources = {}
         self.data_cache = {}
         self.mappings = {}

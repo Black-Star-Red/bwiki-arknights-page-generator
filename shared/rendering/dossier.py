@@ -4,6 +4,15 @@ from __future__ import annotations
 
 import re
 
+def _wiki_text_field(v) -> str:
+    """避免把 Python/JSON 的 None 写成字面量 ``None`` 进 Wiki。"""
+    if v is None:
+        return ""
+    s = str(v).strip()
+    if s.lower() == "none":
+        return ""
+    return s
+
 
 def render_operator_dossier_fields(
     mapper,
@@ -18,14 +27,53 @@ def render_operator_dossier_fields(
 ):
     """干员档案模板"""
     lines: list[str] = []
-    birthday, birthday2, month, day, sex, people, birthplace, height, height2, is_infection, design_sex, experience, experience_name, manufacturer, birthplace2, produce_time, weight, repair_report, infection_status, objective_eesume, physic_intensity, battlefield_flexible, physiology_tolerance, tactic_plan, battle_technic, source_stone_skill_adaptability, diagnosis_analysis, file_one, file_two, file_three, file_four, promotion_record, promotion_archive, maximum_speed, hill_climbing_ability, braking_efficiency, pass_rate, endurance, structural_stability = [None] * 39
-    secret_record = []
+    (
+        birthday,
+        birthday2,
+        month,
+        day,
+        sex,
+        people,
+        birthplace,
+        height,
+        height2,
+        is_infection,
+        design_sex,
+        experience,
+        experience_name,
+        manufacturer,
+        birthplace2,
+        produce_time,
+        weight,
+        repair_report,
+        infection_status,
+        objective_eesume,
+        physic_intensity,
+        battlefield_flexible,
+        physiology_tolerance,
+        tactic_plan,
+        battle_technic,
+        source_stone_skill_adaptability,
+        diagnosis_analysis,
+        file_one,
+        file_two,
+        file_three,
+        file_four,
+        promotion_record,
+        promotion_archive,
+        maximum_speed,
+        hill_climbing_ability,
+        braking_efficiency,
+        pass_rate,
+        endurance,
+        structural_stability,
+    ) = ("" for _ in range(39))
     char_text = mapper.get_data_safe("handbook_info_table", f"handbookDict.{char_id}") or {}
     for story_idx, story_text in enumerate(char_text.get("storyTextAudio") or []):
         mapper.add_mapping("handbook_info_table", "handbook_char_id", char_id)
         mapper.add_mapping("handbook_info_table", "handbook_story_index", str(story_idx))
         if story_text["storyTitle"] == "基础档案":
-            base_story = safe_get_fn(story_text, ["stories", 0, "storyText"])
+            base_story = safe_get_fn(story_text, ["stories", 0, "storyText"]) or ""
             if "【代号】" in base_story or "【姓名】" in base_story:
                 birthday_data = re.search(r"【([^】]*)】(\d+)月(\d+)日", base_story)
                 birthday = (f"{birthday_data.group(2)}月{birthday_data.group(3)}日") if birthday_data and birthday_data.group(1) == "生日" else ""
@@ -63,11 +111,11 @@ def render_operator_dossier_fields(
                 manufacturer_data = re.search(r"【制造商】(.+)\n", base_story)
                 manufacturer = manufacturer_data[1] if manufacturer_data else ""
                 produce_time_data = re.search(r"【出厂时间】(.+)\n", base_story)
-                produce_time = produce_time_data[1] if produce_time_data else ""
         if story_text["storyTitle"] == "客观履历":
-            objective_eesume = process_description_fn(safe_get_fn(story_text, ["stories", 0, "storyText"]), trait_candidates, rich_styles)
+            raw_obj = safe_get_fn(story_text, ["stories", 0, "storyText"]) or ""
+            objective_eesume = process_description_fn(raw_obj, trait_candidates, rich_styles)
         if story_text["storyTitle"] == "综合体检测试":
-            test_story = safe_get_fn(story_text, ["stories", 0, "storyText"])
+            test_story = safe_get_fn(story_text, ["stories", 0, "storyText"]) or ""
             physic_intensity_data = re.search(r"【物理强度】(.+)\n", test_story)
             physic_intensity = physic_intensity_data[1] if physic_intensity_data else ""
             battlefield_flexible_data = re.search(r"【战场机动】(.+)\n", test_story)
@@ -96,41 +144,44 @@ def render_operator_dossier_fields(
             else:
                 diagnosis_analysis = ""
         if story_text["storyTitle"] == "档案资料一":
-            file_one = safe_get_fn(story_text, ["stories", 0, "storyText"]).replace("\n", "<br/>")
+            file_one = (safe_get_fn(story_text, ["stories", 0, "storyText"]) or "").replace("\n", "<br/>")
         elif story_text["storyTitle"] == "档案资料二":
-            file_two = safe_get_fn(story_text, ["stories", 0, "storyText"]).replace("\n", "<br/>")
+            file_two = (safe_get_fn(story_text, ["stories", 0, "storyText"]) or "").replace("\n", "<br/>")
         elif story_text["storyTitle"] == "档案资料三":
-            file_three = safe_get_fn(story_text, ["stories", 0, "storyText"]).replace("\n", "<br/>")
+            file_three = (safe_get_fn(story_text, ["stories", 0, "storyText"]) or "").replace("\n", "<br/>")
         elif story_text["storyTitle"] == "档案资料四":
-            file_four = safe_get_fn(story_text, ["stories", 0, "storyText"]).replace("\n", "<br/>")
+            file_four = (safe_get_fn(story_text, ["stories", 0, "storyText"]) or "").replace("\n", "<br/>")
         elif story_text["storyTitle"] == "晋升记录":
-            promotion_record = safe_get_fn(story_text, ["stories", 0, "storyText"]).replace("\n", "<br/>")
+            promotion_record = (safe_get_fn(story_text, ["stories", 0, "storyText"]) or "").replace("\n", "<br/>")
         elif "升变档案" in story_text["storyTitle"]:
-            promotion_archive = safe_get_fn(story_text, ["stories", 0, "storyText"]).replace("\n", "<br/>")
+            promotion_archive = (safe_get_fn(story_text, ["stories", 0, "storyText"]) or "").replace("\n", "<br/>")
         if story_text["storyTitle"] == "综合性能检测结果":
-            performance_story = safe_get_fn(story_text, ["stories", 0, "storyText"])
-            maximum_speed_data = re.search(r"/【最高速度】(.+)\n/", performance_story)
-            maximum_speed = maximum_speed_data[1] if maximum_speed_data else ""
-            hill_climbing_ability_data = re.search(r"/【爬坡能力】(.+)\n/", performance_story)
-            hill_climbing_ability = hill_climbing_ability_data[1] if hill_climbing_ability_data else ""
-            braking_efficiency_data = re.search(r"/【制动效能】(.+)\n/", performance_story)
-            braking_efficiency = braking_efficiency_data[1] if braking_efficiency_data else ""
-            pass_rate_data = re.search(r"/【通过性】(.+)\n/", performance_story)
-            pass_rate = pass_rate_data[1] if pass_rate_data else ""
-            endurance_data = re.search(r"/【续航】(.+)\n/", performance_story)
-            endurance = endurance_data[1] if endurance_data else ""
-            structural_stability_data = re.search(r"/【结构稳定性】(.+)/", performance_story)
-            structural_stability = structural_stability_data[1] if structural_stability_data else ""
-        for i in range(1, 4):
-            record = [
+            performance_story = safe_get_fn(story_text, ["stories", 0, "storyText"]) or ""
+            maximum_speed_data = re.search(r"【最高速度】(.+)", performance_story)
+            maximum_speed = maximum_speed_data.group(1).strip() if maximum_speed_data else ""
+            hill_climbing_ability_data = re.search(r"【爬坡能力】(.+)", performance_story)
+            hill_climbing_ability = hill_climbing_ability_data.group(1).strip() if hill_climbing_ability_data else ""
+            braking_efficiency_data = re.search(r"【制动效能】(.+)", performance_story)
+            braking_efficiency = braking_efficiency_data.group(1).strip() if braking_efficiency_data else ""
+            pass_rate_data = re.search(r"【通过性】(.+)", performance_story)
+            pass_rate = pass_rate_data.group(1).strip() if pass_rate_data else ""
+            endurance_data = re.search(r"【续航】(.+)", performance_story)
+            endurance = endurance_data.group(1).strip() if endurance_data else ""
+            structural_stability_data = re.search(r"【结构稳定性】(.+)", performance_story)
+            structural_stability = structural_stability_data.group(1).strip() if structural_stability_data else ""
+
+    secret_record = []
+    for i in range(1, 4):
+        secret_record.append(
+            [
                 safe_get_fn(char_text, ["handbookAvgList", i - 1, "storySetName"]),
                 safe_get_fn(char_text, ["handbookAvgList", i - 1, "unlockParam", 0, "unlockParam1"]),
                 safe_get_fn(char_text, ["handbookAvgList", i - 1, "unlockParam", 0, "unlockParam1"]),
                 safe_get_fn(char_text, ["handbookAvgList", i - 1, "unlockParam", 0, "unlockParam2"]),
                 safe_get_fn(char_text, ["handbookAvgList", i - 1, "unlockParam", 1, "unlockParam1"]),
-                safe_get_fn(char_text, ["handbookAvgList", i - 1, "unlockParam", 0, "storyIntro"]),
+                safe_get_fn(char_text, ["handbookAvgList", i - 1, "avgList", 0, "storyIntro"]),
             ]
-            secret_record.append(record)
+        )
 
     lines.append(f"|生日={birthday}")
     lines.append(f"|出厂日={birthday2}")
@@ -144,10 +195,11 @@ def render_operator_dossier_fields(
     lines.append(f"|身高={height}")
     lines.append(f"|高度={height2}")
     lines.append(f"|是否感染={is_infection}")
-    lines.append(f"|设定性别={design_sex}")
-    lines.append(f"|专精={value['专精']}")
-    lines.append(f"|经验={experience}<!--类似十年这样的文本-->")
-    lines.append(f"|经验名称={experience_name}<!--不填写即显示战斗经验-->")
+    lines.append(f"|设定性别={_wiki_text_field(design_sex)}")
+    spec = _wiki_text_field(value.get("专精", ""))
+    lines.append(f"|专精={spec}")
+    lines.append(f"|经验={_wiki_text_field(experience)}<!--类似十年这样的文本-->")
+    lines.append(f"|经验名称={_wiki_text_field(experience_name)}<!--不填写即显示战斗经验-->")
     lines.append(f"|制造商={manufacturer}")
     lines.append(f"|产地={birthplace2}")
     lines.append(f"|出厂时间={produce_time}")
@@ -166,9 +218,10 @@ def render_operator_dossier_fields(
     lines.append(f"|档案资料二={file_two}")
     lines.append(f"|档案资料三={file_three}")
     lines.append(f"|档案资料四={file_four}")
+    lines.append(f"|升变档案={promotion_archive}")
     lines.append(f"|晋升记录={promotion_record}")
-    lines.append(f"|升变档案={promotion_archive if promotion_archive else ''}")
-    lines.append(f"|档案资料五={value['宣传介绍']}")
+    promo5 = _wiki_text_field(value.get("宣传介绍", ""))
+    lines.append(f"|档案资料五={promo5}")
     lines.append("|档案资料五标题=宣传介绍")
     lines.append(f"|最高速度={maximum_speed if maximum_speed else ''}")
     lines.append(f"|爬坡能力={hill_climbing_ability if hill_climbing_ability else ''}")
@@ -178,16 +231,17 @@ def render_operator_dossier_fields(
     lines.append(f"|结构稳定性={structural_stability if structural_stability else ''}")
     lines.append("|体检描述=")
     for i in range(1, 4):
-        lines.append(f"|干员密录{i}={secret_record[i][0] if secret_record[i][0] else ''}")
+        rec = secret_record[i - 1]
+        lines.append(f"|干员密录{i}={rec[0] if rec[0] else ''}")
         lines.append(
             f"|干员密录{i}解锁条件="
             + (
-                f"[[文件: icon_e{secret_record[i][1]}_need.png|20px|link=|class=invert-color]]提升至精英阶段{secret_record[i][2]}等级{secret_record[i][3]}<br/>[[文件:icon_信赖.png|20px|link=|class=invert-color]]提升信赖至{secret_record[i][4]}"
-                if secret_record[i][1]
+                f"[[文件: icon_e{rec[1]}_need.png|20px|link=|class=invert-color]]提升至精英阶段{rec[2]}等级{rec[3]}<br/>[[文件:icon_信赖.png|20px|link=|class=invert-color]]提升信赖至{rec[4]}"
+                if rec[1]
                 else ""
             )
         )
-        lines.append(f"|干员密录{i}描述={secret_record[i][5] if secret_record[i][5] else ''}")
+        lines.append(f"|干员密录{i}描述={rec[5] if rec[5] else ''}")
         lines.append(f"|干员密录{i}述描视频=")
     lines.append("|悖论模拟标题=")
     return lines

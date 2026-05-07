@@ -20,6 +20,8 @@ arknights_toolbox/config/config.local.json
 *.local.yml
 .env
 .env.*
+ARCHITECTURE.md
+arknights_toolbox.egg-info
 
 # 日志与运行时
 arknights_toolbox/log/
