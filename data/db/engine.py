@@ -29,6 +29,7 @@ def resolve_database_settings(config: dict) -> dict[str, Any]:
     """合并 database 配置与 supplementary 子项默认值。"""
     raw = config.get("database") if isinstance(config.get("database"), dict) else {}
     sup = raw.get("supplementary") if isinstance(raw.get("supplementary"), dict) else {}
+    act = raw.get("activity") if isinstance(raw.get("activity"), dict) else {}
     return {
         "enabled": bool(raw.get("enabled", False)),
         "url": (raw.get("url") or "").strip(),
@@ -45,6 +46,8 @@ def resolve_database_settings(config: dict) -> dict[str, Any]:
             or list(sup.get("required_fields") or ["获取途径", "实装日期"])
             + ["专精", "画师"]
         ),
+        "activity_table": (act.get("table") or "activities").strip() or "activities",
+        "activity_sync_from_data_source": bool(act.get("sync_from_data_source", True)),
     }
 
 

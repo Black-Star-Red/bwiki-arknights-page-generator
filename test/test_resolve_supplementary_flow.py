@@ -1,9 +1,15 @@
 """补充数据：按人补缺判定。"""
 
+from core.character_script.resolve_supplementary import _has_activity_time_filter
 from data.db.supplementary_repo import (
     missing_supplementary_fields,
     needs_supplementary_fetch,
 )
+
+
+def test_activity_filter_and_character_num_exclusive():
+    assert _has_activity_time_filter(100, 200)
+    assert not _has_activity_time_filter(None, None)
 
 
 def test_needs_fetch_when_missing_specialization():

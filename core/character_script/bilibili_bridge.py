@@ -40,7 +40,7 @@ def get_user_dynamics(mid, headers, offset=None):
 def discover_operator_names(
     mid,
     headers,
-    character_num,
+    character_num: int | None,
     *,
     dynamic_start_ts: int | None = None,
     dynamic_end_ts: int | None = None,

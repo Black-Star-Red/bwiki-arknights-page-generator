@@ -14,7 +14,7 @@ import traceback
 from pathlib import Path
 
 from core.character_script import run_character_pipeline
-from shared.services import ActivityRecord, list_activities_from_data_source
+from shared.services import ActivityRecord, list_activities_for_ui
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
 from PySide6.QtWidgets import (
@@ -201,11 +201,15 @@ class ArknightsToolWindow(QWidget):
 
         root = _project_root()
         default_config = root / "config" / "config.json"
+        # 指向 config.json 即可；同目录 config.local.json 会被 load_config 自动合并
+        pick_config = default_config
 
         self.edit_config = QLineEdit()
-        self.edit_config.setPlaceholderText("config.json 路径")
-        if default_config.is_file():
-            self.edit_config.setText(str(default_config))
+        self.edit_config.setPlaceholderText("config.json 路径（同目录 config.local.json 会自动合并）")
+        if pick_config.is_file():
+            self.edit_config.setText(str(pick_config))
+        self._activity_source_hint = QLabel("活动列表：尚未加载")
+        self._activity_source_hint.setStyleSheet("color: #666; font-size: 12px;")
 
         btn_cfg = QPushButton("浏览…")
         btn_cfg.clicked.connect(self._pick_config)
@@ -219,11 +223,15 @@ class ArknightsToolWindow(QWidget):
         self.chk_character_num.setSuffix(" 个干员")
         self.combo_activity = QComboBox()
         self.combo_activity.setMinimumWidth(280)
-        self.combo_activity.setPlaceholderText("随当前数据源加载活动…")
+        self.combo_activity.setPlaceholderText("启用数据库后从 activities 表读取…")
         row_activity = QHBoxLayout()
         row_activity.addWidget(self.combo_activity, stretch=1)
-        self.form_layout.addRow("活动（按时间筛 B 站动态）", row_activity)
+        activity_col = QVBoxLayout()
+        activity_col.addLayout(row_activity)
+        activity_col.addWidget(self._activity_source_hint)
+        self.form_layout.addRow("活动（按时间筛 B 站动态）", activity_col)
         self.form_layout.addRow("选择干员数量(按实装顺序)", self.chk_character_num)
+        self.combo_activity.currentIndexChanged.connect(self._sync_batch_mode_ui)
         self.edit_operator_filter = QLineEdit()
         self.edit_operator_filter.setPlaceholderText("可选：输入干员名或 charId（留空=按数量批量）")
         self.form_layout.addRow("指定干员", self.edit_operator_filter)
@@ -312,7 +320,7 @@ class ArknightsToolWindow(QWidget):
         self._reload_activities()
 
     def _reload_activities(self) -> None:
-        """从当前数据源经 DataMapper 加载 activity_table，填充活动下拉框。"""
+        """启用库：数据源同步进 activities 后只读库；未启用库则直接读 JSON。"""
         prev = self._selected_activity()
         prev_name = prev.name if prev else None
         self.combo_activity.clear()
@@ -321,19 +329,23 @@ class ArknightsToolWindow(QWidget):
         if not cfg_path or not os.path.isfile(cfg_path):
             self.combo_activity.addItem("（请先选择有效 config.json）", None)
             self._activity_records = []
+            self._activity_source_hint.setText("活动列表：请先选择有效配置文件")
             return
         data_source = self.combo_source.currentText().strip()
         if not data_source:
             self._activity_records = []
+            self._activity_source_hint.setText("活动列表：请先选择数据源")
             return
         try:
-            records = list_activities_from_data_source(cfg_path, data_source)
+            records, source = list_activities_for_ui(cfg_path, data_source)
+            self._activity_source_hint.setText(f"活动列表：{source}")
         except Exception as e:
             self.combo_activity.addItem(
                 f"（加载失败: {type(e).__name__}: {e}）",
                 None,
             )
             self._activity_records = []
+            self._activity_source_hint.setText(f"活动列表：加载失败 {e}")
             return
         self._activity_records = records
         restore_index = 0
@@ -342,6 +354,21 @@ class ArknightsToolWindow(QWidget):
             if prev_name and rec.name == prev_name:
                 restore_index = self.combo_activity.count() - 1
         self.combo_activity.setCurrentIndex(restore_index)
+        self._sync_batch_mode_ui()
+
+    def _sync_batch_mode_ui(self) -> None:
+        """按活动筛选 与 干员数量 互斥。"""
+        activity = self._selected_activity()
+        by_activity = activity is not None
+        self.chk_character_num.setEnabled(not by_activity)
+        if by_activity:
+            self.edit_operator_filter.setPlaceholderText(
+                "可选：指定干员；留空=处理该活动窗口内全部预告干员"
+            )
+        else:
+            self.edit_operator_filter.setPlaceholderText(
+                "可选：输入干员名或 charId（留空=按数量批量）"
+            )
 
     def _selected_activity(self) -> ActivityRecord | None:
         data = self.combo_activity.currentData()
@@ -419,8 +446,9 @@ class ArknightsToolWindow(QWidget):
         flags = self.wiki_flags()
         quiet = self.log_quiet()
         wiki_sandbox = self.chk_wiki_test_page.isChecked()
-        character_num = self.chk_character_num.value()
         activity = self._selected_activity()
+        by_activity = activity is not None
+        character_num = self.chk_character_num.value()
         dynamic_start_ts = activity.start_ts if activity else None
         dynamic_end_ts = activity.end_ts if activity else None
         if activity and dynamic_start_ts is None and dynamic_end_ts is None:
@@ -436,19 +464,25 @@ class ArknightsToolWindow(QWidget):
             if activity
             else "未选择（按干员数量从最新动态解析）"
         )
+        batch_line = (
+            "批量范围: 活动窗口内全部预告干员（忽略干员数量）"
+            if by_activity
+            else f"批量范围: 最新动态前 {character_num} 名干员（未选活动）"
+        )
         self._show_result_text(
             "—— 运行中 ——\n"
             f"配置: {cfg}\n"
             f"数据源: {src}\n"
             f"活动筛选: {activity_line}\n"
+            f"{batch_line}\n"
             f"动态时间戳: start={dynamic_start_ts} end={dynamic_end_ts}\n"
-            f"指定干员: {operator_filter or '未指定（按数量批量）'}\n"
+            f"指定干员: {operator_filter or ('未指定（活动期内全部）' if by_activity else '未指定（按数量批量）')}\n"
             f"附属模板(charId): {summon_charid or '未指定'}\n"
             f"日志模式: {'普通(quiet=True)' if quiet else '调试(quiet=False)'}\n"
             f"Wiki(非交互): 干员页={flags['wiki_operator_page']} "
             f"语音页={flags['wiki_voice_page']} 半身像={flags['wiki_portrait']}\n"
             f"Wiki 写入目标: {'沙盒测试页' if wiki_sandbox else '正式词条标题'}\n"
-            f"选择干员数量: {character_num} 个\n"
+            f"选择干员数量: {'（已选活动，此项无效）' if by_activity else f'{character_num} 个'}\n"
             "写入 Wiki 前将弹出二次确认（主线程对话框）。\n\n"
             "日志写入项目目录下 debug.log …\n",
             fallback_tab_title="运行状态",

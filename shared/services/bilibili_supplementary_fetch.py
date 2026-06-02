@@ -291,20 +291,23 @@ def discover_operator_names_from_bilibili(
     *,
     announce_line_re: re.Pattern[str],
     collab_activity_re: re.Pattern[str] | None,
-    character_num: int,
+    character_num: int | None,
     dynamic_start_ts: int | None,
     dynamic_end_ts: int | None,
     log_warning: Callable[[str, Any], None],
     log_info: Callable[[str, Any], None],
 ) -> list[str]:
-    """仅扫描动态拿干员名列表（不下载图、不 OCR）。"""
+    """仅扫描动态拿干员名列表（不下载图、不 OCR）。character_num=None 表示不限制人数（按活动时间窗）。"""
     names: list[str] = []
     seen: set[str] = set()
+    unlimited = character_num is None
 
     def on_hit(hit: _AnnounceHit) -> bool:
         if hit.name not in seen:
             seen.add(hit.name)
             names.append(hit.name)
+        if unlimited:
+            return True
         return len(names) < character_num
 
     diag = _scan_announces(
@@ -331,7 +334,9 @@ def discover_operator_names_from_bilibili(
             diag.get("pages"),
             diag.get("items_total"),
         )
-    return names[:character_num]
+    if unlimited:
+        return names
+    return names[: character_num]
 
 
 def _resolve_fetch_target_key(hit_name: str, targets: set[str]) -> str | None:

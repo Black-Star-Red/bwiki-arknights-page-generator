@@ -1,7 +1,8 @@
 """数据库访问层（干员 B 站补充数据缓存）。"""
 
 from .engine import get_session_factory, is_database_enabled, resolve_database_settings
-from .models import Base, OperatorSupplementary
+from .activity_repo import ActivityRepository
+from .models import Activity, Base, OperatorSupplementary
 from .supplementary_repo import (
     OperatorSupplementaryRepository,
     SUPPLEMENTARY_KEYS,
@@ -22,6 +23,8 @@ from .supplementary_repo import (
 )
 
 __all__ = [
+    "Activity",
+    "ActivityRepository",
     "Base",
     "OperatorSupplementary",
     "OperatorSupplementaryRepository",

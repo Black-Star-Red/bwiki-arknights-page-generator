@@ -12,6 +12,16 @@ class Base(DeclarativeBase):
     pass
 
 
+class Activity(Base):
+    """活动时间表（与解包 activity_table / GUI 活动筛选对齐）。"""
+
+    __tablename__ = "activities"
+
+    name: Mapped[str] = mapped_column(String(128), primary_key=True)
+    start_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class OperatorSupplementary(Base):
     """干员 B 站 / 手工补充字段（与 generate_template 中 value dict 对齐）。"""
 

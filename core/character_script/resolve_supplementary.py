@@ -129,31 +129,44 @@ def _discover_names_from_bilibili(
     名单始终优先从 B 站动态发现（仅解析预告行，不 OCR）。
     B 站为空时回退库内完整记录名；不预取 bili_batch。
     """
-    del fetch_bilibili, has_activity_filter  # 保留签名兼容
+    del fetch_bilibili  # 保留签名兼容
+
+    # 按活动筛动态时与「干员数量」互斥：收集时间窗内全部预告干员
+    discover_limit: int | None = None if has_activity_filter else character_num
 
     names: list[str] = []
     if settings["fallback_bilibili"]:
         names = discover_operator_names(
             mid,
             headers,
-            character_num,
+            discover_limit,
             dynamic_start_ts=dynamic_start_ts,
             dynamic_end_ts=dynamic_end_ts,
         )
 
     if not names and use_db:
-        names = repo.list_complete_names(character_num, settings["required_fields"])[
-            :character_num
-        ]
-        if names:
+        if has_activity_filter:
             log_warning(
-                "B 站未发现干员预告，回退数据库名单 %s 条",
-                len(names),
+                "活动窗口内 B 站未发现干员预告，无法按活动批量（请检查活动时间或改按干员数量）"
             )
+        else:
+            names = repo.list_complete_names(character_num, settings["required_fields"])[
+                :character_num
+            ]
+            if names:
+                log_warning(
+                    "B 站未发现干员预告，回退数据库名单 %s 条",
+                    len(names),
+                )
     elif names:
-        log_info("名单来自 B 站动态（仅发现名）%s 人", len(names))
+        if has_activity_filter:
+            log_info("名单来自 B 站动态（活动窗口内全部预告）%s 人", len(names))
+        else:
+            log_info("名单来自 B 站动态（仅发现名）%s 人", len(names))
 
-    return names[:character_num], {}
+    if discover_limit is None:
+        return names, {}
+    return names[:discover_limit], {}
 
 
 

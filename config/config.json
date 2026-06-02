@@ -28,6 +28,10 @@
       "fallback_bilibili": true,
       "skip_bilibili_discover_if_db_complete": true,
       "required_fields": ["获取途径", "实装日期"]
+    },
+    "activity": {
+      "table": "activities",
+      "sync_from_data_source": true
     }
   }
 }
