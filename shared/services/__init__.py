@@ -22,7 +22,7 @@ from .wiki_service import (
     upload_site_file_with_retry,
     write_site_page,
 )
-from .ocr_service import ocr_exec
+from .ocr_service import ocr_exec, ocr_operator_profile
 
 __all__ = [
     "ACTIVITY_TABLE_SOURCE_ID",
@@ -39,5 +39,6 @@ __all__ = [
     "upload_site_file_with_retry",
     "publish_wiki_page_if_enabled",
     "ocr_exec",
+    "ocr_operator_profile",
     "upload_operator_portrait_if_enabled",
 ]

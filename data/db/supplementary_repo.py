@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -15,7 +16,7 @@ from .engine import get_session_factory, resolve_database_settings
 from .models import OperatorSupplementary
 
 # 与 generate_template / bilibili_service 使用的键一致
-SUPPLEMENTARY_KEYS = ("获取途径", "实装日期", "动态id", "专精", "宣传介绍")
+SUPPLEMENTARY_KEYS = ("获取途径", "实装日期", "动态id", "专精", "画师", "宣传介绍")
 
 # 仅内存传递、不入库的补充元数据（merge 时从 B 站侧保留）
 SUPPLEMENTARY_META_KEYS = ("联动", "联动卡池")
@@ -25,10 +26,79 @@ _KEY_TO_COLUMN = {
     "实装日期": "release_date",
     "动态id": "dynamic_id",
     "专精": "specialization",
+    "画师": "drawer",
     "宣传介绍": "promo_intro",
 }
 
 _COLUMN_TO_KEY = {v: k for k, v in _KEY_TO_COLUMN.items()}
+
+_NAME_STRIP_RE = re.compile(r"[\s·・•．.\-]")
+_OCR_FILL_KEYS = ("专精", "画师")
+
+
+def normalize_supplementary_name_key(name: str) -> str:
+    return _NAME_STRIP_RE.sub("", (name or "").strip())
+
+
+def resolve_supplementary_batch_key(name: str, keys: set[str] | list[str]) -> str | None:
+    """将 mapper/库内名对齐到 B 站 batch 或 fetch targets 中的键。"""
+    if not name:
+        return None
+    key_set = set(keys)
+    if name in key_set:
+        return name
+    nk = normalize_supplementary_name_key(name)
+    if not nk:
+        return None
+    by_norm: dict[str, str] = {}
+    for k in key_set:
+        kn = normalize_supplementary_name_key(k)
+        if kn and kn not in by_norm:
+            by_norm[kn] = k
+    if nk in by_norm:
+        return by_norm[nk]
+    best: str | None = None
+    best_len = -1
+    for k in key_set:
+        kn = normalize_supplementary_name_key(k)
+        if not kn:
+            continue
+        if kn in nk or nk in kn:
+            span = min(len(kn), len(nk))
+            if span > best_len:
+                best_len = span
+                best = k
+    return best
+
+
+def lookup_supplementary_in_batch(
+    batch: dict[str, dict[str, Any]],
+    name: str,
+) -> tuple[str | None, dict[str, Any]]:
+    if not batch or not name:
+        return None, {}
+    key = resolve_supplementary_batch_key(name, batch.keys())
+    if key is None:
+        return None, {}
+    return key, batch[key]
+
+
+def apply_bili_ocr_over_empty(
+    merged: dict[str, Any],
+    bili_part: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """DB 优先合并后，仍用 B 站 OCR 填补空的专精/画师。"""
+    out = dict(merged)
+    for key in _OCR_FILL_KEYS:
+        bv = str((bili_part or {}).get(key) or "").strip()
+        if bv and not str(out.get(key) or "").strip():
+            out[key] = bv
+    return out
+
+
+def supplementary_for_upsert(sup: dict[str, Any]) -> dict[str, str]:
+    """仅保留可入库的补充字段（中文键）。"""
+    return {k: str(sup.get(k) or "").strip() for k in SUPPLEMENTARY_KEYS}
 
 
 def _is_generic_acquire_path(path: str) -> bool:
@@ -48,6 +118,7 @@ def row_to_dict(row: OperatorSupplementary | None) -> dict[str, str]:
         "实装日期": row.release_date or "",
         "动态id": row.dynamic_id or "",
         "专精": row.specialization or "",
+        "画师": getattr(row, "drawer", None) or "",
         "宣传介绍": row.promo_intro or "",
     }
 
@@ -123,6 +194,23 @@ def is_supplementary_complete(
         if not str(sup.get(key) or "").strip():
             return False
     return True
+
+
+def missing_supplementary_fields(
+    sup: dict[str, Any] | None,
+    fields: list[str],
+) -> list[str]:
+    """返回仍为空缺的字段名列表。"""
+    if not sup:
+        return list(fields)
+    return [key for key in fields if not str(sup.get(key) or "").strip()]
+
+
+def needs_supplementary_fetch(
+    sup: dict[str, Any] | None,
+    fill_fields: list[str],
+) -> bool:
+    return bool(missing_supplementary_fields(sup, fill_fields))
 
 
 def has_meaningful_supplementary(sup: dict[str, str]) -> bool:
@@ -209,6 +297,7 @@ class OperatorSupplementaryRepository:
             log_warning("跳过写入数据库（补充字段均为空）：%s", name)
             return
         now = datetime.now(timezone.utc)
+        row_payload = supplementary_for_upsert(supplementary)
         with self._factory() as session:
             row = session.get(OperatorSupplementary, name)
             if row is None:
@@ -217,10 +306,18 @@ class OperatorSupplementaryRepository:
             if char_id:
                 row.char_id = char_id
             for key, col in _KEY_TO_COLUMN.items():
-                val = str(supplementary.get(key) or "").strip()
+                val = row_payload.get(key) or ""
                 if val:
                     setattr(row, col, val)
             row.source = source
             row.updated_at = now
             session.commit()
-        log_info("已写入 operator_supplementary：%s char_id=%s", name, char_id or "")
+        drawer = row_payload.get("画师") or ""
+        spec = row_payload.get("专精") or ""
+        log_info(
+            "已写入 operator_supplementary：%s char_id=%s 画师=%s 专精=%s",
+            name,
+            char_id or "",
+            drawer[:40] + ("…" if len(drawer) > 40 else ""),
+            spec[:40] + ("…" if len(spec) > 40 else ""),
+        )

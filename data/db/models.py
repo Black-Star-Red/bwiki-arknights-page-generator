@@ -23,6 +23,7 @@ class OperatorSupplementary(Base):
     release_date: Mapped[str] = mapped_column(Text, default="")
     dynamic_id: Mapped[str] = mapped_column(String(64), default="")
     specialization: Mapped[str] = mapped_column(Text, default="")
+    drawer: Mapped[str] = mapped_column(Text, default="")
     promo_intro: Mapped[str] = mapped_column(Text, default="")
     source: Mapped[str] = mapped_column(String(32), default="bilibili")
     updated_at: Mapped[datetime] = mapped_column(

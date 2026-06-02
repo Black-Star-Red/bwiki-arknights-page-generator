@@ -288,7 +288,7 @@ def extract_mastery(text: str) -> str | None:
         r"客观履历|临床诊断|造影检测|矿石病感染情况|体细胞与源石|血液源石结晶密度|"
         r"物理强度|战场机动|生理耐受|战术规划|战斗技巧|后勤技能|源石技艺适应性|"
         r"模组|潜能|再部署|部署费用|阻挡数|攻击范围|初始携带|"
-        r"身高|体重|性别|种族|生日|出身|中文CV|中)"
+        r"身高|体重|性别|种族|生日|出身|中文CV|绘制|原案|中)"
     )
     max_follow = 12
 
@@ -341,21 +341,23 @@ def extract_mastery(text: str) -> str | None:
         if chunks:
             return "、".join(chunks)
     return None
-def ocr_exec(img_path: str) -> str:
+
+
+def ocr_operator_profile(img_path: str) -> dict[str, str]:
+    """OCR 预告图：专精 + 画师（绘制、原案合成）。"""
+    from shared.ocr_profile_fields import extract_drawer
+
     img = imread_unicode(img_path)
     if img is None:
         raise FileNotFoundError(
             f"无法读取图片（路径错误或 OpenCV 不支持该路径）: {img_path}"
         )
     h, w = img.shape[:2]
-
-    # 两个区域：全图 + 右侧档案区（这类立绘通常在这里）
     rois = [
         ("full", img),
-        ("profile", img[int(h*0.35):int(h*0.75), int(w*0.45):int(w*0.97)])
+        ("profile", img[int(h * 0.35) : int(h * 0.75), int(w * 0.45) : int(w * 0.97)]),
     ]
-
-    all_text = []
+    all_text: list[str] = []
     for name, roi in rois:
         print(f"OCR 区域: {name} …", flush=True)
         txt = run_ocr(preprocess(roi))
@@ -366,20 +368,36 @@ def ocr_exec(img_path: str) -> str:
     merged = merged.replace(" ", "").replace("　", "")
     print(merged)
 
-    val = extract_mastery(merged)
-    if not val:
+    mastery = extract_mastery(merged)
+    if not mastery:
         m = re.search(r"专精\s*[：:]\s*([^\n【]{1,120})", merged)
         if m:
-            val = m.group(1).strip()
+            mastery = m.group(1).strip()
 
-    if val:
-        print("专精 =", val)
-        return val
+    drawer = extract_drawer(merged) or ""
+    if mastery:
+        print("专精 =", mastery)
     else:
         line = next((x for x in merged.splitlines() if "专精" in x), None)
-        print("未精确提取，候选行：", line)
-        return ""
+        print("未精确提取专精，候选行：", line)
+    if drawer:
+        print("画师 =", drawer)
+    else:
+        draw_ctx = [
+            x
+            for x in merged.splitlines()
+            if x.strip() and ("绘制" in x or "绑制" in x or "原案" in x)
+        ][:6]
+        print("未识别画师（绘制/原案），相关行：", draw_ctx or "(无)")
+
+    return {"专精": mastery or "", "画师": drawer}
+
+
+def ocr_exec(img_path: str) -> str:
+    """兼容旧接口：仅返回专精字符串。"""
+    return ocr_operator_profile(img_path).get("专精", "")
 
 __all__ = [
     "ocr_exec",
+    "ocr_operator_profile",
 ]

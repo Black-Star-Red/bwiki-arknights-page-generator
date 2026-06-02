@@ -10,11 +10,14 @@ import pytest
 from data.db.engine import reset_engine_cache
 from data.db.supplementary_repo import (
     OperatorSupplementaryRepository,
+    apply_bili_ocr_over_empty,
     apply_db_with_bili_meta,
+    lookup_supplementary_in_batch,
     merge_supplementary,
     merge_supplementary_bilibili_first,
     is_supplementary_complete,
     empty_supplementary_dict,
+    resolve_supplementary_batch_key,
 )
 @pytest.fixture
 def sqlite_config(tmp_path):
@@ -34,12 +37,64 @@ def sqlite_config(tmp_path):
 
 
 def test_merge_db_over_bili():
-    db = {"获取途径": "活动获取", "实装日期": "", "动态id": "", "专精": "", "宣传介绍": ""}
-    bili = {"获取途径": "标准寻访", "实装日期": "2026-01-01", "动态id": "1", "专精": "", "宣传介绍": ""}
+    db = {
+        "获取途径": "活动获取",
+        "实装日期": "",
+        "动态id": "",
+        "专精": "",
+        "画师": "",
+        "宣传介绍": "",
+    }
+    bili = {
+        "获取途径": "标准寻访",
+        "实装日期": "2026-01-01",
+        "动态id": "1",
+        "专精": "",
+        "画师": "",
+        "宣传介绍": "",
+    }
     merged = merge_supplementary(db, bili)
     assert merged["获取途径"] == "活动获取"
     assert merged["实装日期"] == "2026-01-01"
     assert merged["动态id"] == "1"
+
+
+def test_upsert_drawer_persists(sqlite_config):
+    reset_engine_cache()
+    repo = OperatorSupplementaryRepository(sqlite_config)
+    sup = {
+        "获取途径": "标准寻访",
+        "实装日期": "x",
+        "动态id": "",
+        "专精": "材料A",
+        "画师": "Studio Montagne、Skade（原案）",
+        "宣传介绍": "",
+    }
+    repo.upsert("画师测试", sup, source="bilibili")
+    loaded = repo.get_by_name("画师测试")
+    assert loaded is not None
+    assert loaded["画师"] == sup["画师"]
+    assert loaded["专精"] == "材料A"
+    reset_engine_cache()
+
+
+def test_bili_batch_name_alias_lookup():
+    batch = {"焰狐龙梓兰": {"画师": "OCR画师", "获取途径": "标准寻访"}}
+    key, part = lookup_supplementary_in_batch(batch, "焰狐龙·梓兰")
+    assert key == "焰狐龙梓兰"
+    assert part["画师"] == "OCR画师"
+    assert resolve_supplementary_batch_key("凯尔希·思衡托", {"凯尔希思衡托"}) == "凯尔希思衡托"
+
+
+def test_apply_bili_ocr_over_empty_keeps_db():
+    db = merge_supplementary(
+        {"获取途径": "活动", "实装日期": "1", "专精": "旧", "画师": ""},
+        None,
+    )
+    bili = {"专精": "", "画师": "新画师"}
+    out = apply_bili_ocr_over_empty(db, bili)
+    assert out["专精"] == "旧"
+    assert out["画师"] == "新画师"
 
 
 def test_upsert_and_read(sqlite_config):

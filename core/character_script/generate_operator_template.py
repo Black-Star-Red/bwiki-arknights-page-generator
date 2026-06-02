@@ -181,7 +181,9 @@ def generate_template(
                     name,
                     found_cid,
                 )
-                parts = build_operator_parts_without_local_json(name, value, mapper)
+                parts = build_operator_parts_without_local_json(
+                    name, value, mapper, char_id=found_cid
+                )
                 for idx, line in enumerate(parts):
                     if line.startswith("|charId="):
                         parts[idx] = f"|charId={found_cid}"
@@ -356,7 +358,9 @@ def generate_template(
                 )
                 )
 
-                drawer = resolve_drawer_with_fallback(mapper, Id)
+                drawer = resolve_drawer_with_fallback(
+                    mapper, Id, db_drawer=value.get("画师")
+                )
                 parts.append(f"|画师={drawer}")
 
                 parts.append("|皮肤=")

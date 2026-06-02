@@ -58,20 +58,30 @@ def build_drawer_from_skins(mapper, char_id):
     return drawer
 
 
-def resolve_drawer_with_fallback(mapper, char_id):
+def resolve_drawer_with_fallback(
+    mapper,
+    char_id: str,
+    *,
+    db_drawer: str | None = None,
+) -> str:
     """
-    先从当前数据源获取画师；若为空则回退到其它数据源组尝试。
+    画师解析顺序：
+    1. 当前数据源 skin_table
+    2. 其它数据源组 skin_table
+    3. 补充库 / OCR 写入的「画师」字段（db_drawer）
     """
     drawer = build_drawer_from_skins(mapper, char_id)
     if drawer.strip():
         return drawer
-    other_keys = [k for k in mapper.config["data_sources"].keys() if k != mapper.current_data_sources]
+    other_keys = [
+        k for k in mapper.config["data_sources"].keys() if k != mapper.current_data_sources
+    ]
     for alt in other_keys:
         with mapper.temporary_source_group(alt):
             drawer = build_drawer_from_skins(mapper, char_id)
             if drawer.strip():
-                break
-    return drawer
+                return drawer
+    return (db_drawer or "").strip()
 
 __all__ = [
     "render_skill_materials",

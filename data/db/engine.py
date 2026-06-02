@@ -14,6 +14,17 @@ _ENGINE = None
 _SESSION_FACTORY = None
 
 
+def _dedupe_field_list(fields) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in fields or []:
+        key = str(raw).strip()
+        if key and key not in seen:
+            seen.add(key)
+            out.append(key)
+    return out
+
+
 def resolve_database_settings(config: dict) -> dict[str, Any]:
     """合并 database 配置与 supplementary 子项默认值。"""
     raw = config.get("database") if isinstance(config.get("database"), dict) else {}
@@ -29,6 +40,11 @@ def resolve_database_settings(config: dict) -> dict[str, Any]:
             sup.get("skip_bilibili_discover_if_db_complete", True)
         ),
         "required_fields": list(sup.get("required_fields") or ["获取途径", "实装日期"]),
+        "fill_fields": _dedupe_field_list(
+            sup.get("fill_fields")
+            or list(sup.get("required_fields") or ["获取途径", "实装日期"])
+            + ["专精", "画师"]
+        ),
     }
 
 
@@ -65,7 +81,40 @@ def get_engine(config: dict, *, config_path: str | Path | None = None):
     url = _resolve_sqlite_url(settings["url"], config_path=config_path)
     _ENGINE = create_engine(url, future=True)
     Base.metadata.create_all(_ENGINE)
+    _ensure_operator_supplementary_columns(_ENGINE)
     return _ENGINE
+
+
+def _ensure_operator_supplementary_columns(engine) -> None:
+    """已有表时补列（create_all 不会 ALTER）。"""
+    from sqlalchemy import inspect, text
+
+    try:
+        insp = inspect(engine)
+        if "operator_supplementary" not in insp.get_table_names():
+            return
+        cols = {c["name"] for c in insp.get_columns("operator_supplementary")}
+    except Exception:
+        return
+    if "drawer" in cols:
+        return
+    dialect = engine.dialect.name
+    if dialect == "mysql":
+        ddl = "ALTER TABLE operator_supplementary ADD COLUMN drawer TEXT"
+    elif dialect == "sqlite":
+        ddl = "ALTER TABLE operator_supplementary ADD COLUMN drawer TEXT DEFAULT ''"
+    else:
+        ddl = "ALTER TABLE operator_supplementary ADD COLUMN drawer TEXT DEFAULT ''"
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(ddl))
+        from core.script_logging import log_info
+
+        log_info("operator_supplementary 已补列 drawer")
+    except Exception as exc:
+        from core.script_logging import log_warning
+
+        log_warning("operator_supplementary 补列 drawer 失败: %s", exc)
 
 
 def get_session_factory(config: dict, *, config_path: str | Path | None = None):

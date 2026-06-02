@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from shared.globals import VOICE_MAP
-from shared.rendering import process_description, render_operator_dossier_fields
+from shared.rendering import (
+    process_description,
+    render_operator_dossier_fields,
+    resolve_drawer_with_fallback,
+)
 from shared.rendering.voice import _CV_FIELD_SPECS
 from shared.utils import safe_get
 
@@ -57,7 +61,13 @@ def _empty_progression_and_skill_placeholders() -> list[str]:
     return lines
 
 
-def build_operator_parts_without_local_json(name: str, value: dict, mapper) -> list[str]:
+def build_operator_parts_without_local_json(
+    name: str,
+    value: dict,
+    mapper,
+    *,
+    char_id: str | None = None,
+) -> list[str]:
     """生成干员 Wiki 模板：B 站 supplementary 有值，游戏 JSON 字段为空。"""
     obtain = collab_obtain_path(value) or value.get("获取途径") or ""
     label = build_corner_labels(value)
@@ -73,6 +83,12 @@ def build_operator_parts_without_local_json(name: str, value: dict, mapper) -> l
     if is_limited_dynamic(value):
         parts.append("|解限=否")
     parts.append(f"|获取途径={obtain}")
+    cid = (char_id or "").strip()
+    if cid:
+        drawer = resolve_drawer_with_fallback(mapper, cid, db_drawer=value.get("画师"))
+    else:
+        drawer = (value.get("画师") or "").strip()
+    parts.append(f"|画师={drawer}")
     parts.append("|英文名=")
     parts.append("|职业=")
     parts.append("|星级=")

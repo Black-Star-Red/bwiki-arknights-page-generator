@@ -381,243 +381,62 @@ def fetch_character_supplementary_data(
     character_num: int = 3,
     dynamic_start_ts: int | None = None,
     dynamic_end_ts: int | None = None,
+    target_names: set[str] | list[str] | None = None,
 ) -> dict[str, dict[str, str]]:
-    """Fetch supplementary character data from Bilibili APIs."""
-    result: dict[str, dict[str, str]] = {}
-    diag: dict[str, int] = {
-        "pages": 0,
-        "items_total": 0,
-        "skipped_exceptions": 0,
-        "win_after": 0,
-        "win_in": 0,
-        "win_before": 0,
-        "win_unknown": 0,
-        "announce_hits": 0,
-    }
-    eff_start = _effective_dynamic_start(dynamic_start_ts)
-    collab_gacha_pools: set[str] = set()
-    url = "https://api.bilibili.com/x/space/article"
-    params = {
-        "mid": mid,
-        "ps": 12,
-    }
-    request = None
-    for attempt in range(5):
-        try:
-            resp = requests.get(url, params=params, headers=headers, timeout=10)
-            if resp.status_code == 200 and (resp.text or "").strip():
-                request = resp
-                break
-            print(f"获取卡池失败: status={resp.status_code}, body前120={resp.text[:120] if resp.text else ''}")
-        except requests.RequestException as e:
-            print(f"获取卡池失败: {e}")
-        time.sleep((2**attempt) * 0.4 + random.random() * 0.2)
+    """
+    拉取 B 站干员补充数据。
 
-    pool_view: dict[str, list[str]] = {}
-    pool_limited_ops: dict[str, set[str]] = {}
-    if request is not None:
-        try:
-            req_json = request.json()
-            articles = req_json.get("data", {}).get("articles", [])
-        except ValueError as e:
-            print(f"获取卡池失败: JSON解析失败 {e}; 响应前200字符: {request.text[:200]}")
-            articles = []
-        for article in articles:
-            if "限定寻访" in article["title"]:
-                data = [article["title"][1:8]]
-                left = article["title"].find("【")
-                right = article["title"].find("】")
-                ltime = article["summary"].find("活动时间：")
-                rtime = article["summary"].find("日")
-                data.append(article["summary"][ltime + 5 : rtime + 1])
-                pool_key = article["title"][left + 1 : right]
-                pool_view[pool_key] = data
-                pool_limited_ops[pool_key] = _extract_limited_operators_from_article_summary(
-                    article.get("summary") or ""
-                )
-    else:
-        print("获取卡池失败")
+    target_names 为 None：先发现 character_num 个干员名，再对每人完整抓取（含 OCR）。
+    target_names 指定时：仅对名单内干员完整抓取。
+    """
+    from .bilibili_supplementary_fetch import (
+        discover_operator_names_from_bilibili,
+        fetch_character_supplementary_for_names,
+    )
 
-    print(pool_view)
-    dynamics = fetch_user_dynamics(mid, headers, log_warning=log_warning)
-
-    release_time = None
-    time_filter = dynamic_start_ts is not None or dynamic_end_ts is not None
-    if time_filter:
-        log_info(
-            "bilibili_dynamic_time_filter start=%s end=%s effective_start=%s (pre_%ss)",
-            dynamic_start_ts,
-            dynamic_end_ts,
-            eff_start,
-            BILIBILI_PRE_START_SECONDS,
-        )
-    while len(result.keys()) < character_num:
-        if not dynamics or not isinstance(dynamics, dict):
-            break
-        diag["pages"] += 1
-        items_page = dynamics.get("items") or []
-        if not isinstance(items_page, list):
-            break
-        diag["items_total"] += len(items_page)
-        reached_before_window = False
-        for item in items_page:
-            if time_filter:
-                window = _dynamic_in_activity_window(
-                    _dynamic_pub_ts(item),
-                    dynamic_start_ts=eff_start,
-                    dynamic_end_ts=dynamic_end_ts,
-                )
-                diag[f"win_{window}"] = diag.get(f"win_{window}", 0) + 1
-                if window == "before":
-                    reached_before_window = True
-                    break
-                if window == "after":
-                    continue
-            try:
-                nodes_with_src = _collect_rich_text_nodes_with_source(item)
-                nodes = [n for n, _ in nodes_with_src]
-                photo_url = _first_dyn_draw_src(item)
-                if not nodes or not photo_url:
-                    continue
-                is_collab = _dynamic_is_collaboration(item, collab_activity_re)
-                if is_collab:
-                    collab_gacha_pools |= _extract_collab_gacha_pools_from_nodes(nodes)
-                side_story = _extract_side_story_from_nodes(nodes)
-                for index, (node, from_forward) in enumerate(nodes_with_src):
-                    text = node["orig_text"]
-                    # 抽奖公示转发内嵌的旧干员预告（如「恭喜…中奖」+ 转发【承诺】//凯尔希）
-                    if from_forward:
-                        continue
-                    if announce_line_re.match(text):
-                        release_time = None
-                        diag["announce_hits"] += 1
-                        character: dict[str, Any] = {}
-                        gacha_pool = text[text.find("【") + 1 : text.find("】")]
-                        start = text.find("//")
-                        end = text.find("\n", start)
-                        name = text[start + 2 : end]
-                        photo_path = operator_photo_dir() / f"{name}.jpg"
-                        if not photo_path.exists():
-                            photo = requests.get(photo_url, timeout=10)
-                            photo_path.parent.mkdir(parents=True, exist_ok=True)
-                            if photo.status_code == 200:
-                                photo_path.write_bytes(photo.content)
-                        try:
-                            from .ocr_service import ocr_exec
-                            character["专精"] = ocr_exec(str(photo_path))
-                        except Exception:
-                            character["专精"] = ""
-                            log_warning("专精OCR失败，已降级为空 name=%s", name)
-                        # character["专精"] = ""
-                        print(character)
-                        implementation_data = pool_view.get(gacha_pool)
-                        in_collab_event = is_collab or bool(collab_gacha_pools)
-                        named_collab_pool = bool(
-                            gacha_pool
-                            and gacha_pool not in ("新增干员", "活动奖励干员")
-                            and (is_collab or gacha_pool in collab_gacha_pools)
-                        )
-                        collab_standard_pool = bool(
-                            gacha_pool in ("新增干员", "活动奖励干员")
-                            and in_collab_event
-                        )
-                        if named_collab_pool:
-                            character["联动"] = True
-                            character["联动卡池"] = gacha_pool
-                            character["获取途径"] = _obtain_path_for_gacha_pool(
-                                gacha_pool,
-                                acquisition_method,
-                                collab=True,
-                            )
-                            dynamic_id = get_dynamic_id(name)
-                            if dynamic_id:
-                                character["动态id"] = dynamic_id
-                        elif collab_standard_pool:
-                            character["联动"] = True
-                            character["获取途径"] = _obtain_path_for_gacha_pool(
-                                gacha_pool,
-                                acquisition_method,
-                                side_story=side_story,
-                            )
-                        elif implementation_data is not None:
-                            if implementation_data[1] and implementation_data[1][0] == "0":
-                                implementation_data[1] = implementation_data[1][1:]
-                            release_time = implementation_data[1]
-                            prefix = acquisition_method.get(implementation_data[0])
-                            limited_in_pool = pool_limited_ops.get(gacha_pool, set())
-                            if prefix is not None:
-                                if not limited_in_pool or _is_limited_operator_in_pool(
-                                    name, limited_in_pool
-                                ):
-                                    character["获取途径"] = (
-                                        prefix + f"{gacha_pool}】限定寻访"
-                                    )
-                                    dynamic_id = get_dynamic_id(name)
-                                    if dynamic_id:
-                                        character["动态id"] = dynamic_id
-                                else:
-                                    # 卡池 UP 但专栏未标 [限定]，如承诺池中的可露希尔
-                                    character["获取途径"] = acquisition_method.get(
-                                        "新增干员", "标准寻访"
-                                    )
-                        else:
-                            character["获取途径"] = _obtain_path_for_gacha_pool(
-                                gacha_pool,
-                                acquisition_method,
-                                side_story=side_story,
-                            )
-                        if release_time:
-                            character["实装日期"] = (
-                                "[https://t.bilibili.com/"
-                                + item["id_str"]
-                                + "?spm_id_from=333.1387.0.0 "
-                                + release_time
-                                + "]"
-                            )
-                        else:
-                            character["实装日期"] = (
-                                "[https://t.bilibili.com/"
-                                + item["id_str"]
-                                + "?spm_id_from=333.1387.0.0 "
-                                + datetime.now().strftime("%Y年%m月%d日")
-                                + "]"
-                            )
-                        intro = text[text.rfind("_") + 2 :].rstrip("\n")
-                        intro = intro.replace("\n", "<br/>\n")
-                        character["宣传介绍"] = intro.replace("<br/>\n<br/>\n关注并转发本条动态，我们将抽取10位博士赠送【现金648元】一份。","")
-                        result[name] = character
-                        if len(result) >= character_num:
-                            break
-            except Exception:
-                diag["skipped_exceptions"] += 1
-                if len(result) >= character_num:
-                    break
-                continue
-        if reached_before_window:
-            break
-        offset = dynamics.get("offset")
-        if not offset:
-            break
-        dynamics = fetch_user_dynamics(mid, headers, offset, log_warning=log_warning)
-    log_info("result:%s", result)
-    if not result:
-        log_warning(
-            "supplementary_data_empty mid=%s pool_keys=%s pages=%s items_total=%s "
-            "skipped_exceptions=%s win_after=%s win_in=%s win_before=%s win_unknown=%s "
-            "announce_hits=%s — 若 items_total=0 请检查 config.cookies（含 SESSDATA）"
-            "与 Referer；将回退数据库名单",
+    if target_names is not None:
+        return fetch_character_supplementary_for_names(
             mid,
-            len(pool_view),
-            diag["pages"],
-            diag["items_total"],
-            diag["skipped_exceptions"],
-            diag.get("win_after", 0),
-            diag.get("win_in", 0),
-            diag.get("win_before", 0),
-            diag.get("win_unknown", 0),
-            diag.get("announce_hits", 0),
+            headers,
+            target_names,
+            announce_line_re=announce_line_re,
+            acquisition_method=acquisition_method,
+            collab_activity_re=collab_activity_re,
+            log_warning=log_warning,
+            log_info=log_info,
+            dynamic_start_ts=dynamic_start_ts,
+            dynamic_end_ts=dynamic_end_ts,
         )
-    return result
+
+    names = discover_operator_names_from_bilibili(
+        mid,
+        headers,
+        announce_line_re=announce_line_re,
+        collab_activity_re=collab_activity_re,
+        character_num=character_num,
+        dynamic_start_ts=dynamic_start_ts,
+        dynamic_end_ts=dynamic_end_ts,
+        log_warning=log_warning,
+        log_info=log_info,
+    )
+    if not names:
+        return {}
+    return fetch_character_supplementary_for_names(
+        mid,
+        headers,
+        names,
+        announce_line_re=announce_line_re,
+        acquisition_method=acquisition_method,
+        collab_activity_re=collab_activity_re,
+        log_warning=log_warning,
+        log_info=log_info,
+        dynamic_start_ts=dynamic_start_ts,
+        dynamic_end_ts=dynamic_end_ts,
+    )
 
 
-__all__ = ["fetch_user_dynamics", "fetch_character_supplementary_data", "operator_photo_dir"]
+__all__ = [
+    "fetch_user_dynamics",
+    "fetch_character_supplementary_data",
+    "operator_photo_dir",
+]
