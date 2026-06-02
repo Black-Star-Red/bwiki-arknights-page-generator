@@ -1,34 +1,30 @@
-"""Typed adapter layer for the legacy operator script."""
+"""已弃用：请改用 `arknights_toolbox.core.character_script`。"""
 
 from __future__ import annotations
 
-from types import ModuleType
+import warnings
 from typing import Any
 
-from .legacy_loader import load_legacy_script_module
+from .character_script import main as _main
+from .character_script.pipeline import run_character_pipeline as _run_character_pipeline
 
 
-def _load_legacy_module() -> ModuleType:
-    """Load the legacy script module through a single adapter."""
-    return load_legacy_script_module()
+def _warn_legacy(name: str) -> None:
+    warnings.warn(
+        f"{name} 已弃用，请改用 arknights_toolbox.core.character_script",
+        DeprecationWarning,
+        stacklevel=3,
+    )
 
 
 def run_legacy_pipeline(*args: Any, **kwargs: Any) -> str:
-    """Run `run_character_pipeline` exposed by the legacy script."""
-    mod = _load_legacy_module()
-    run_fn = getattr(mod, "run_character_pipeline", None)
-    if run_fn is None:
-        raise AttributeError("Legacy script does not expose run_character_pipeline")
-    return run_fn(*args, **kwargs)
+    _warn_legacy("run_legacy_pipeline")
+    return _run_character_pipeline(*args, **kwargs)
 
 
 def run_legacy_cli() -> None:
-    """Run `main()` exposed by the legacy CLI script."""
-    mod = _load_legacy_module()
-    cli_main = getattr(mod, "main", None)
-    if cli_main is None:
-        raise AttributeError("core/干员脚本2.0.py 缺少 main()")
-    cli_main()
+    _warn_legacy("run_legacy_cli")
+    _main()
 
 
 __all__ = ["run_legacy_pipeline", "run_legacy_cli"]

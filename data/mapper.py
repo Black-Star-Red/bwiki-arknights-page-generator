@@ -1,30 +1,40 @@
 """Data mapper implementation."""
 
+from __future__ import annotations
+
 import datetime
-import json
 import operator as op
 import os
 import re
-from pathlib import Path
-from .sources import ApiDataSource, FileDataSource, JsonDataSource
 from contextlib import contextmanager
+from pathlib import Path
+from typing import Sequence
+
+from .config_loader import load_config, resolve_config_path
+from .sources import ApiDataSource, FileDataSource, JsonDataSource
+
 
 class DataMapper:
-    """数据映射器，负责统一访问不同数据源。"""
+    """数据映射器：基于已加载的配置 dict，统一访问不同数据源。"""
 
     def __init__(
         self,
-        config_path,
-        debug=False,
-        log_path=None,
-        data_source_group=None,
-        interactive=None,
+        config: dict,
+        *,
+        debug: bool = False,
+        log_path: str | None = None,
+        data_source_group: str | None = None,
+        interactive: bool | None = None,
+        config_path: str | Path | None = None,
     ):
-        if hasattr(self, "config_path"):
-            return
+        if not isinstance(config, dict):
+            raise TypeError(
+                "DataMapper 接收 config dict；"
+                "请使用 DataMapper.from_file(path) 或 load_config(path)"
+            )
 
-        self.config_path = config_path
-        self.config = self._load_config()
+        self.config_path = str(config_path) if config_path is not None else None
+        self.config = config
         self.sources = {}
         self.data_cache = {}
         self.mappings = {}
@@ -40,8 +50,28 @@ class DataMapper:
         self.current_data_sources = None
         self._init_sources()
 
-    def _project_root(self):
-        return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    @classmethod
+    def from_file(
+        cls,
+        config_path: str | Path,
+        *,
+        search_dirs: Sequence[Path] | None = None,
+        debug: bool = False,
+        log_path: str | None = None,
+        data_source_group: str | None = None,
+        interactive: bool | None = None,
+    ) -> DataMapper:
+        """从配置文件路径加载并构造 DataMapper。"""
+        resolved = resolve_config_path(config_path, search_dirs=search_dirs)
+        config = load_config(resolved, search_dirs=search_dirs)
+        return cls(
+            config,
+            debug=debug,
+            log_path=log_path,
+            data_source_group=data_source_group,
+            interactive=interactive,
+            config_path=resolved,
+        )
 
     def _log(self, level, message, **kv):
         if not self.debug and level not in ("ERROR",):
@@ -70,51 +100,6 @@ class DataMapper:
         if log_path is not None:
             self.log_path = log_path
 
-    def _read_config_file(self, path_obj: Path):
-        suffix = path_obj.suffix.lower()
-        if suffix == ".json":
-            return json.loads(path_obj.read_text(encoding="utf-8"))
-        if suffix in {".yaml", ".yml"}:
-                    try:
-                        import yaml
-                    except ImportError as e:
-                        raise RuntimeError(
-                            f"配置文件是 YAML，但未安装 PyYAML: {path_obj}\n"
-                            "请安装: pip install pyyaml"
-                        ) from e
-                    with path_obj.open("r", encoding="utf-8") as f:
-                        return yaml.safe_load(f) or {}
-        raise RuntimeError(f"不支持的配置格式: {path_obj}")
-    def load_merged_config(self, base_path: Path):
-        base = self._read_config_file(base_path)
-        # 关键：按主配置后缀找 local
-        local_name = f"{base_path.stem}.local{base_path.suffix}"  # config.local.json / config.local.yaml
-        local_path = base_path.with_name(local_name)
-        if local_path.exists():
-            local = self._read_config_file(local_path)
-            base.update(local)  # 需要深合并可替换这里
-        env_cookies = os.getenv("ARK_TOOL_COOKIES")
-        if env_cookies:
-            base["cookies"] = env_cookies
-        return base
-    def _load_config(self):
-        if not os.path.isabs(self.config_path):
-            root = self._project_root()
-            rel_path = self.config_path
-            # 新结构默认从 arknights_toolbox/config 读取配置。
-            candidates = [
-                os.path.join(root, "arknights_toolbox", "config", rel_path),
-                os.path.join(root, rel_path),
-                os.path.join(os.getcwd(), rel_path),
-                os.path.join(os.getcwd(), "ArknightsGameData", rel_path),
-            ]
-            config_path = next((p for p in candidates if os.path.exists(p)), candidates[0])
-        else:
-            config_path = self.config_path
-
-        path_obj = Path(config_path)
-        # JSON / 其它默认走你的合并逻辑
-        return self.load_merged_config(path_obj)
 
     def _init_sources(self):
         mapping_sources = {}

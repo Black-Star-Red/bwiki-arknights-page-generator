@@ -13,7 +13,8 @@ import threading
 import traceback
 from pathlib import Path
 
-from arknights_toolbox.core.legacy_api import run_legacy_pipeline
+from core.character_script import run_character_pipeline
+from shared.services import ActivityRecord, list_activities_from_data_source
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
 from PySide6.QtWidgets import (
@@ -137,6 +138,8 @@ class OperatorRunThread(QThread):
         quiet: bool,
         wiki_use_test_page: bool,
         character_num: int,
+        dynamic_start_ts: int | None = None,
+        dynamic_end_ts: int | None = None,
     ) -> None:
         super().__init__()
         self._config_path = config_path
@@ -148,6 +151,8 @@ class OperatorRunThread(QThread):
         self._quiet = quiet
         self._wiki_use_test_page = wiki_use_test_page
         self._character_num = character_num
+        self._dynamic_start_ts = dynamic_start_ts
+        self._dynamic_end_ts = dynamic_end_ts
     def run(self) -> None:
         # _project_root() = .../arknights_toolbox；import arknights_toolbox 需要仓库根在 sys.path
         pkg_root = _project_root()
@@ -163,7 +168,7 @@ class OperatorRunThread(QThread):
                 def wiki_confirm(prompt: str, wiki_key: str) -> bool:
                     return bridge.ask_blocking(prompt, wiki_key)
 
-            tpl = run_legacy_pipeline(
+            tpl = run_character_pipeline(
                 config_path=self._config_path,
                 data_source_group=self._data_source,
                 operator_filter=self._operator_filter,
@@ -177,6 +182,8 @@ class OperatorRunThread(QThread):
                 wiki_confirm=wiki_confirm,
                 character_num=self._character_num,
                 summon_charid=self._summon_charid,
+                dynamic_start_ts=self._dynamic_start_ts,
+                dynamic_end_ts=self._dynamic_end_ts,
             )
             self.succeeded.emit(tpl or "")
         except BaseException as e:
@@ -190,6 +197,7 @@ class ArknightsToolWindow(QWidget):
         self.resize(960, 640)
         self._run_thread: OperatorRunThread | None = None
         self._wiki_bridge = WikiConfirmBridge(self)
+        self._activity_records: list[ActivityRecord] = []
 
         root = _project_root()
         default_config = root / "config" / "config.json"
@@ -209,6 +217,12 @@ class ArknightsToolWindow(QWidget):
         self.chk_character_num.setRange(1, 100)
         self.chk_character_num.setValue(3)
         self.chk_character_num.setSuffix(" 个干员")
+        self.combo_activity = QComboBox()
+        self.combo_activity.setMinimumWidth(280)
+        self.combo_activity.setPlaceholderText("随当前数据源加载活动…")
+        row_activity = QHBoxLayout()
+        row_activity.addWidget(self.combo_activity, stretch=1)
+        self.form_layout.addRow("活动（按时间筛 B 站动态）", row_activity)
         self.form_layout.addRow("选择干员数量(按实装顺序)", self.chk_character_num)
         self.edit_operator_filter = QLineEdit()
         self.edit_operator_filter.setPlaceholderText("可选：输入干员名或 charId（留空=按数量批量）")
@@ -232,6 +246,7 @@ class ArknightsToolWindow(QWidget):
             )
         )
         self.combo_source.setCurrentIndex(0)
+        self.combo_source.currentIndexChanged.connect(self._reload_activities)
 
         row_src = QHBoxLayout()
         row_src.addWidget(QLabel("数据源"))
@@ -294,6 +309,43 @@ class ArknightsToolWindow(QWidget):
 
         self._clear_result_tabs()
         self._add_result_tab("提示", self._placeholder_result, editable=False)
+        self._reload_activities()
+
+    def _reload_activities(self) -> None:
+        """从当前数据源经 DataMapper 加载 activity_table，填充活动下拉框。"""
+        prev = self._selected_activity()
+        prev_name = prev.name if prev else None
+        self.combo_activity.clear()
+        self.combo_activity.addItem("（不按活动筛选）", None)
+        cfg_path = self.edit_config.text().strip()
+        if not cfg_path or not os.path.isfile(cfg_path):
+            self.combo_activity.addItem("（请先选择有效 config.json）", None)
+            self._activity_records = []
+            return
+        data_source = self.combo_source.currentText().strip()
+        if not data_source:
+            self._activity_records = []
+            return
+        try:
+            records = list_activities_from_data_source(cfg_path, data_source)
+        except Exception as e:
+            self.combo_activity.addItem(
+                f"（加载失败: {type(e).__name__}: {e}）",
+                None,
+            )
+            self._activity_records = []
+            return
+        self._activity_records = records
+        restore_index = 0
+        for rec in records:
+            self.combo_activity.addItem(rec.label, rec)
+            if prev_name and rec.name == prev_name:
+                restore_index = self.combo_activity.count() - 1
+        self.combo_activity.setCurrentIndex(restore_index)
+
+    def _selected_activity(self) -> ActivityRecord | None:
+        data = self.combo_activity.currentData()
+        return data if isinstance(data, ActivityRecord) else None
 
     def _clear_result_tabs(self) -> None:
         while self.result_tabs.count():
@@ -329,6 +381,7 @@ class ArknightsToolWindow(QWidget):
         )
         if path:
             self.edit_config.setText(path)
+            self._reload_activities()
 
     def _wiki_select_all(self) -> None:
         self.chk_wiki_operator.setChecked(True)
@@ -367,10 +420,28 @@ class ArknightsToolWindow(QWidget):
         quiet = self.log_quiet()
         wiki_sandbox = self.chk_wiki_test_page.isChecked()
         character_num = self.chk_character_num.value()
+        activity = self._selected_activity()
+        dynamic_start_ts = activity.start_ts if activity else None
+        dynamic_end_ts = activity.end_ts if activity else None
+        if activity and dynamic_start_ts is None and dynamic_end_ts is None:
+            QMessageBox.warning(
+                self,
+                "提示",
+                f"活动「{activity.name}」在游戏数据中缺少开始/结束时间，将不按时间筛选。",
+            )
+            dynamic_start_ts = None
+            dynamic_end_ts = None
+        activity_line = (
+            activity.label
+            if activity
+            else "未选择（按干员数量从最新动态解析）"
+        )
         self._show_result_text(
             "—— 运行中 ——\n"
             f"配置: {cfg}\n"
             f"数据源: {src}\n"
+            f"活动筛选: {activity_line}\n"
+            f"动态时间戳: start={dynamic_start_ts} end={dynamic_end_ts}\n"
             f"指定干员: {operator_filter or '未指定（按数量批量）'}\n"
             f"附属模板(charId): {summon_charid or '未指定'}\n"
             f"日志模式: {'普通(quiet=True)' if quiet else '调试(quiet=False)'}\n"
@@ -394,6 +465,8 @@ class ArknightsToolWindow(QWidget):
             quiet=quiet,
             wiki_use_test_page=wiki_sandbox,
             character_num=character_num,
+            dynamic_start_ts=dynamic_start_ts,
+            dynamic_end_ts=dynamic_end_ts,
         )
         self._run_thread.succeeded.connect(self._on_run_succeeded)
         self._run_thread.failed.connect(self._on_run_failed)

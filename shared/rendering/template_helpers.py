@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from data.mapper_helpers import bind_item
+
 
 def render_skill_materials(mapper, all_skill_lvlup, level):
     """
@@ -23,7 +25,8 @@ def render_skill_materials(mapper, all_skill_lvlup, level):
         parts_m = []
         for cost in costs:
             iid = cost.get("id")
-            nm = mapper.get_data_safe("item_table", f"items.{iid}.name", default=iid if iid is not None else "未知物品")
+            bind_item(mapper, iid)
+            nm = mapper.get_data_safe("item_table", "item_name_by_id", default=iid if iid is not None else "未知物品")
             parts_m.append(f"{{{{data|{nm}|{cost.get('count', '')}}}}}")
         materials = "".join(parts_m)
     else:

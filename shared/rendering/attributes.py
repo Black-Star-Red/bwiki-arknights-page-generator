@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from arknights_toolbox.shared.globals import TRUST_ATTRIBUTE_LABELS
+from shared.globals import TRUST_ATTRIBUTE_LABELS
 
 
 def render_operator_potential_fields(mapper):
@@ -20,7 +20,7 @@ def render_operator_potential_fields(mapper):
 def render_operator_trust_fields(mapper):
     """渲染信赖加成字段。"""
     lines: list[str] = []
-    favor_data = mapper.get_data_safe("character_table", "{favorKeyFrames}[1].data")
+    favor_data = mapper.get_data_safe("character_table", "favor_keyframe_data")
     for attribute_key, attribute_value in TRUST_ATTRIBUTE_LABELS.items():
         data = favor_data.get(attribute_key, 0) if favor_data else 0
         lines.append(f"|信赖{attribute_value}={('+' + str(data)) if data > 0 else ''}")

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+from data.mapper_helpers import bind_handbook_char
+
 def _wiki_text_field(v) -> str:
     """避免把 Python/JSON 的 None 写成字面量 ``None`` 进 Wiki。"""
     if v is None:
@@ -68,9 +70,9 @@ def render_operator_dossier_fields(
         endurance,
         structural_stability,
     ) = ("" for _ in range(39))
-    char_text = mapper.get_data_safe("handbook_info_table", f"handbookDict.{char_id}") or {}
+    bind_handbook_char(mapper, char_id)
+    char_text = mapper.get_data_safe("handbook_info_table", "handbook_dict_entry") or {}
     for story_idx, story_text in enumerate(char_text.get("storyTextAudio") or []):
-        mapper.add_mapping("handbook_info_table", "handbook_char_id", char_id)
         mapper.add_mapping("handbook_info_table", "handbook_story_index", str(story_idx))
         if story_text["storyTitle"] == "基础档案":
             base_story = safe_get_fn(story_text, ["stories", 0, "storyText"]) or ""
@@ -113,7 +115,7 @@ def render_operator_dossier_fields(
                 produce_time_data = re.search(r"【出厂时间】(.+)\n", base_story)
         if story_text["storyTitle"] == "客观履历":
             raw_obj = safe_get_fn(story_text, ["stories", 0, "storyText"]) or ""
-            objective_eesume = process_description_fn(raw_obj, trait_candidates, rich_styles)
+            objective_eesume = process_description_fn(raw_obj, trait_candidates, rich_styles,term_description_dict)
         if story_text["storyTitle"] == "综合体检测试":
             test_story = safe_get_fn(story_text, ["stories", 0, "storyText"]) or ""
             physic_intensity_data = re.search(r"【物理强度】(.+)\n", test_story)

@@ -2,7 +2,21 @@
 
 from __future__ import annotations
 
-from arknights_toolbox.shared.utils import PHASE
+from data.mapper_helpers import (
+    bind_item,
+    bind_keyframe_index,
+    bind_phase_index,
+    bind_skill_list_index,
+    bind_skill_table_id,
+)
+from shared.utils import PHASE
+
+
+def _phase_attr_data(mapper, phase_index: int, keyframe_index: int) -> dict:
+    bind_phase_index(mapper, phase_index)
+    bind_keyframe_index(mapper, keyframe_index)
+    data = mapper.get_data_safe("character_table", "phase_attr_keyframe_data", default={}) or {}
+    return data if isinstance(data, dict) else {}
 
 
 def Material(mapper, character_id, star, phase):
@@ -22,21 +36,30 @@ def Material(mapper, character_id, star, phase):
         for cost in evolve_costs:
             item_id = cost.get("id")
             count = cost.get("count")
-            item_name = mapper.get_data_safe("item_table", f"items.{item_id}.name", default=item_id if item_id is not None else "")
+            bind_item(mapper, item_id)
+            item_name = mapper.get_data_safe(
+                "item_table", "item_name_by_id", default=item_id if item_id is not None else ""
+            )
             result += f"{{{{data|{item_name}|{count}}}}}"
     elif int(star) == 5:
         result = "{{data|龙门币|20000}}" if phase == 1 else "{{data|龙门币|120000}}"
         for cost in evolve_costs:
             item_id = cost.get("id")
             count = cost.get("count")
-            item_name = mapper.get_data_safe("item_table", f"items.{item_id}.name", default=item_id if item_id is not None else "")
+            bind_item(mapper, item_id)
+            item_name = mapper.get_data_safe(
+                "item_table", "item_name_by_id", default=item_id if item_id is not None else ""
+            )
             result += f"{{{{data|{item_name}|{count}}}}}"
     elif int(star) == 4:
         result = "{{data|龙门币|15000}}" if phase == 1 else "{{data|龙门币|60000}}"
         for cost in evolve_costs:
             item_id = cost.get("id")
             count = cost.get("count")
-            item_name = mapper.get_data_safe("item_table", f"items.{item_id}.name", default=item_id if item_id is not None else "")
+            bind_item(mapper, item_id)
+            item_name = mapper.get_data_safe(
+                "item_table", "item_name_by_id", default=item_id if item_id is not None else ""
+            )
             result += f"{{{{data|{item_name}|{count}}}}}"
     elif int(star) == 3:
         result = "{{data|龙门币|10000}}"
@@ -55,27 +78,27 @@ def LevelUPEnhance(mapper, star, phase):
         return ""
 
     content = "属性上限提升"
-    cost0_path = "{phases}" + f"[{phase-1}].attributesKeyFrames[0].data.cost"
-    cost1_path = "{phases}" + f"[{phase}].attributesKeyFrames[1].data.cost"
-    cost0 = mapper.get_data_safe("character_table", cost0_path)
-    cost1 = mapper.get_data_safe("character_table", cost1_path)
+    cost0_data = _phase_attr_data(mapper, phase - 1, 0)
+    cost1_data = _phase_attr_data(mapper, phase, 1)
+    cost0 = cost0_data.get("cost", 0)
+    cost1 = cost1_data.get("cost", 0)
     if cost1 - cost0 > 0:
         content += f"<br/>增加部署费用{{{{color|ff6801|{cost1 - cost0}}}}}"
 
     if int(star) > 3:
-        skills = mapper.get_data_safe("character_table", "{skills}", default=[]) or []
+        skills = mapper.get_data_safe("character_table", "skills", default=[]) or []
+        skill_id = None
         if int(star) == 6 and len(skills) > phase:
             skill_id = skills[phase].get("skillId")
         elif len(skills) > phase:
             skill_id = skills[phase].get("skillId")
-        else:
-            skill_id = None
         if skill_id:
-            levels = mapper.get_data_safe("skill_table", f"{skill_id}.levels", default=[]) or []
+            bind_skill_table_id(mapper, skill_id)
+            levels = mapper.get_data_safe("skill_table", "skill_levels", default=[]) or []
             skill_name = levels[0].get("name", "未知技能") if levels else "未知技能"
             content += f"<br/>获得新技能{{{{color|00b0ff|{skill_name}}}}}"
 
-    talents = mapper.get_data_safe("character_table", "{talents}", default=[]) or []
+    talents = mapper.get_data_safe("character_table", "talents", default=[]) or []
     has_phase0_and_phase1 = False
     talents0_candidates = []
 
@@ -108,7 +131,7 @@ def LevelUPEnhance(mapper, star, phase):
         talent_name_first = talents0_candidates[0].get("name", "未知天赋")
         content += f"<br/>新获得天赋{{{{color|00b0ff|{talent_name_first}}}}}"
 
-    phases = mapper.get_data_safe("character_table", "{phases}", default=[]) or []
+    phases = mapper.get_data_safe("character_table", "phases", default=[]) or []
     if len(phases) > phase:
         range_id_prev = phases[phase - 1].get("rangeId") if len(phases) > phase - 1 else None
         range_id_curr = phases[phase].get("rangeId")
@@ -125,7 +148,7 @@ def LevelUPEnhance(mapper, star, phase):
                 break
 
     if phase == 2:
-        potential_item_id = mapper.get_data_safe("character_table", "{currentCharId}.potentialItemId", default="") or ""
+        potential_item_id = mapper.get_data_safe("character_table", "potentialItemId", default="") or ""
         start = potential_item_id.rfind("_")
         if start != -1:
             mod_id = f"uniequip_001_{potential_item_id[start + 1:]}"
@@ -139,9 +162,6 @@ def LevelUPEnhance(mapper, star, phase):
 def render_operator_progression_fields(mapper, star):
     """
     渲染干员晋升与面板成长字段，返回可直接 append/extend 的模板行列表。
-
-    一星、二星与 B 站 Wiki「一星干员」标准模板一致：无精英段时精一「等级需求 / 提升 / 材料」
-    留空（不填 phase0.maxLevel）；精一满级面板与精二整块仍按 phases 是否存在输出。
     """
     lines: list[str] = []
     try:
@@ -149,7 +169,7 @@ def render_operator_progression_fields(mapper, star):
     except (TypeError, ValueError):
         digits = "".join(c for c in str(star) if c.isdigit())
         star_n = int(digits[-1]) if digits else 1
-    phases0_data = mapper.get_data_safe("character_table", "{phases}[0].attributesKeyFrames[0].data")
+    phases0_data = mapper.get_data_safe("character_table", "phase0_attr_data")
     rdcCost = 0
     potential_ranks = mapper.get_data_safe("character_table", "potentialRanks")
     if potential_ranks:
@@ -159,7 +179,7 @@ def render_operator_progression_fields(mapper, star):
     costPro = None
     zudang = None
     if star_n >= 4:
-        phase_data = mapper.get_data_safe("character_table", "{phases}[*].attributesKeyFrames[1].data")
+        phase_data = mapper.get_data_safe("character_table", "phase_attr_max_data_list")
         costPro = phase_data[2].get("cost", 0) - rdcCost if phase_data[2] else 0
         phases_data = []
         for i in range(3):
@@ -167,7 +187,7 @@ def render_operator_progression_fields(mapper, star):
                 phases_data.append(str(phase_data[i].get("blockCnt", 0)))
         zudang = "→".join(phases_data)
     elif star_n == 3:
-        phase_data = mapper.get_data_safe("character_table", "{phases}[*].attributesKeyFrames[1].data")
+        phase_data = mapper.get_data_safe("character_table", "phase_attr_max_data_list")
         costPro = phase_data[1].get("cost", 0) - rdcCost if phase_data and len(phase_data) > 1 else 0
         phases_data = []
         for i in range(2):
@@ -175,7 +195,7 @@ def render_operator_progression_fields(mapper, star):
                 phases_data.append(str(phase_data[i].get("blockCnt", 0)))
         zudang = "→".join(phases_data)
     elif star_n < 3:
-        phases0_max_data = mapper.get_data_safe("character_table", "{phases}[0].attributesKeyFrames[1].data")
+        phases0_max_data = mapper.get_data_safe("character_table", "phase0_attr_max_data")
         costPro = phases0_max_data.get("cost", 0) - rdcCost if phases0_max_data else 0
         phases_data = []
         if phases0_max_data:
@@ -185,7 +205,8 @@ def render_operator_progression_fields(mapper, star):
     lines.append(f"|初始攻击={phases0_data.get('atk', '') if phases0_data else ''}")
     lines.append(f"|初始防御={phases0_data.get('def', '') if phases0_data else ''}")
     lines.append(f"|初始法抗={int(phases0_data.get('magicResistance', 0)) if phases0_data else ''}")
-    lines.append(f"|初始攻击范围={mapper.get_data_safe('character_table', 'rangeId')[0]}")
+    range_ids = mapper.get_data_safe("character_table", "rangeId") or []
+    lines.append(f"|初始攻击范围={range_ids[0] if range_ids else ''}")
 
     lines.append(f"|再部署={phases0_data.get('respawnTime', '') if phases0_data else ''}")
     lines.append(f"|部署费用={phases0_data.get('cost', '') if phases0_data else ''}")
@@ -198,8 +219,7 @@ def render_operator_progression_fields(mapper, star):
     lines.append(f"|攻击间隔={phases0_data.get('baseAttackTime', '') if phases0_data else ''}<!-- 写攻击间隔的值 -->")
     lines.append("|bb备注=")
 
-
-    phases0_max_data = mapper.get_data_safe("character_table", "{phases}[0].attributesKeyFrames[1].data")
+    phases0_max_data = mapper.get_data_safe("character_table", "phase0_attr_max_data")
     lines.append(f"|初始生命max={phases0_max_data.get('maxHp', '') if phases0_max_data else ''}")
     lines.append(f"|初始攻击max={phases0_max_data.get('atk', '') if phases0_max_data else ''}")
     lines.append(f"|初始防御max={phases0_max_data.get('def', '') if phases0_max_data else ''}")
@@ -209,26 +229,26 @@ def render_operator_progression_fields(mapper, star):
         lines.append("|精1提升=")
         lines.append("|精1材料=")
     else:
-        lines.append(f"|精1等级需求={mapper.get_data_safe('character_table', '{phases}[0].maxLevel')}")
+        lines.append(f"|精1等级需求={mapper.get_data_safe('character_table', 'phase0_max_level')}")
         lines.append(f"|精1提升={LevelUPEnhance(mapper, star, 1)}")
         lines.append(f"|精1材料={Material(mapper, '{phases}', star, 1)}")
 
-    phases1_max_data = mapper.get_data_safe("character_table", "{phases}[1].attributesKeyFrames[1].data") if star_n > 2 else None
+    phases1_max_data = mapper.get_data_safe("character_table", "phase1_attr_max_data") if star_n > 2 else None
     lines.append(f"|精1生命max={phases1_max_data.get('maxHp', '') if phases1_max_data else ''}")
     lines.append(f"|精1攻击max={phases1_max_data.get('atk', '') if phases1_max_data else ''}")
     lines.append(f"|精1防御max={phases1_max_data.get('def', '') if phases1_max_data else ''}")
     lines.append(f"|精1法抗max={int(phases1_max_data.get('magicResistance', 0)) if phases1_max_data else ''}")
-    lines.append(f"|精1攻击范围={mapper.get_data_safe('character_table', 'rangeId')[1] if phases1_max_data else ''}")
+    lines.append(f"|精1攻击范围={range_ids[1] if phases1_max_data and len(range_ids) > 1 else ''}")
 
-    phases2_max_data = mapper.get_data_safe("character_table", "{phases}[2].attributesKeyFrames[1].data") if star_n > 3 else None
-    lines.append(f"|精2等级需求={mapper.get_data_safe('character_table', '{phases}[1].maxLevel') if phases2_max_data else ''}")
+    phases2_max_data = mapper.get_data_safe("character_table", "phase2_attr_max_data") if star_n > 3 else None
+    lines.append(f"|精2等级需求={mapper.get_data_safe('character_table', 'phase1_max_level') if phases2_max_data else ''}")
     lines.append(f"|精2提升={LevelUPEnhance(mapper, star, 2)}")
     lines.append(f"|精2材料={Material(mapper, '{phases}', star, 2)}")
     lines.append(f"|精2生命max={phases2_max_data.get('maxHp', '') if phases2_max_data else ''}")
     lines.append(f"|精2攻击max={phases2_max_data.get('atk', '') if phases2_max_data else ''}")
     lines.append(f"|精2防御max={phases2_max_data.get('def', '') if phases2_max_data else ''}")
     lines.append(f"|精2法抗max={int(phases2_max_data.get('magicResistance', 0)) if phases2_max_data else ''}")
-    lines.append(f"|精2攻击范围={mapper.get_data_safe('character_table', '{phases}[2].rangeId') if phases2_max_data else ''}")
+    lines.append(f"|精2攻击范围={mapper.get_data_safe('character_table', 'phase2_range_id') if phases2_max_data else ''}")
     return lines
 
 

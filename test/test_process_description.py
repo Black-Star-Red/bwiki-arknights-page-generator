@@ -1,5 +1,5 @@
 import pytest
-from arknights_toolbox.shared.rendering.description_parser import process_description
+from shared.rendering.description_parser import process_description
 rich_styles ={
     "mission.levelname": "<color=#FFDE00>{0}</color>",
     "mission.number": "<color=#FFDE00>{0}</color>",

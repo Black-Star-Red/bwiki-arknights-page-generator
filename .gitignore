@@ -23,9 +23,14 @@ arknights_toolbox/config/config.local.json
 ARCHITECTURE.md
 arknights_toolbox.egg-info
 
+# 测试拉取的 B 站 API 快照（本地查看用）
+test/output/
+
 # 日志与运行时
 arknights_toolbox/log/
 *.log
+config/cache/
+*.db
 
 # IDE
 .idea/

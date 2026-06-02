@@ -2,9 +2,24 @@
 
 from __future__ import annotations
 
-from arknights_toolbox.shared.globals import POTENTIAL_SUFFIX
-from arknights_toolbox.shared.rendering.description_parser import process_description
-from arknights_toolbox.shared.utils import PHASE
+from data.mapper_helpers import (
+    bind_keyframe_index,
+    bind_operator,
+    bind_phase_index,
+    bind_skill_index,
+    bind_skill_table_id,
+    bind_talent_group,
+)
+from shared.globals import POTENTIAL_SUFFIX
+from shared.rendering.description_parser import process_description
+from shared.utils import PHASE
+
+
+def _operator_phase_attr(mapper, phase_index: int, keyframe_index: int) -> dict:
+    bind_phase_index(mapper, phase_index)
+    bind_keyframe_index(mapper, keyframe_index)
+    data = mapper.get_data_safe("character_table", "operator_phase_attr_data", default={}) or {}
+    return data if isinstance(data, dict) else {}
 
 
 def render_summon_template_lines(
@@ -29,15 +44,15 @@ def render_summon_template_lines(
     lines.append("|皮肤名=")
     lines.append(f"|单位名称={summon_name}")
     lines.append(f"|所属干员={owner_name}")
-    lines.append(f"|英文名={mapper.get_data_safe('character_table', f'{summon_key}.appellation') if summon_key else ''}")
-    feature = mapper.get_data_safe("character_table", f"{summon_key}.description") if summon_key else ""
+    if summon_key:
+        bind_operator(mapper, summon_key)
+    lines.append(f"|英文名={mapper.get_data_safe('character_table', 'operator_appellation') if summon_key else ''}")
+    feature = mapper.get_data_safe("character_table", "operator_description") if summon_key else ""
     lines.append(f"|特性={feature if feature else '无'}")
-    lines.append(f"|部署位={position_map.get(mapper.get_data_safe('character_table', f'{summon_key}.position'), '') if summon_key else ''}")
+    lines.append(f"|部署位={position_map.get(mapper.get_data_safe('character_table', 'operator_position'), '') if summon_key else ''}")
     for phase_idx in range(0, 3):
         keyframe_idx = 0 if phase_idx == 0 else 1
-        phase_data = mapper.get_data_safe(
-            "character_table", f"{summon_key}.phases" + f"[{phase_idx}].attributesKeyFrames[{keyframe_idx}].data"
-        ) if summon_key else {}
+        phase_data = _operator_phase_attr(mapper, phase_idx, keyframe_idx) if summon_key else {}
         lift = phase_data.get("maxHp")
         atk = phase_data.get("atk")
         def_data = phase_data.get("def")
@@ -47,7 +62,7 @@ def render_summon_template_lines(
             lines.append(f"|初始攻击={atk if atk is not None else ''}")
             lines.append(f"|初始防御={def_data if def_data is not None else ''}")
             lines.append(f"|初始法抗={int(magic) if magic is not None else ''}")
-            max_phase_data = mapper.get_data_safe("character_table", f"{summon_key}.phases[0].attributesKeyFrames[1].data") if summon_key else {}
+            max_phase_data = _operator_phase_attr(mapper, 0, 1) if summon_key else {}
             lift = max_phase_data.get("maxHp")
             atk = max_phase_data.get("atk")
             def_data = max_phase_data.get("def")
@@ -62,30 +77,30 @@ def render_summon_template_lines(
             lines.append(f"|精{phase_idx}防御max={def_data if def_data is not None else ''}")
             lines.append(f"|精{phase_idx}法抗max={int(magic) if magic is not None else ''}")
 
-    summon_cost = mapper.get_data_safe("character_table", f"{summon_key}.phases[0].attributesKeyFrames[0].data") if summon_key else {}
+    summon_cost = _operator_phase_attr(mapper, 0, 0) if summon_key else {}
     lines.append(f"|部署费用={summon_cost.get('cost', '') if summon_cost else ''}")
     if int(owner_star) >= 4:
         respawn_time = []
         phases_data = []
         for i in range(3):
-            phase_data = mapper.get_data_safe("character_table", f"{summon_key}.phases[{i}].attributesKeyFrames[0].data") if summon_key else {}
+            phase_data = _operator_phase_attr(mapper, i, 0) if summon_key else {}
             respawn_time.append(phase_data.get("respawnTime"))
-            max_phase_data = mapper.get_data_safe("character_table", f"{summon_key}.phases[{i}].attributesKeyFrames[1].data") if summon_key else {}
+            max_phase_data = _operator_phase_attr(mapper, i, 1) if summon_key else {}
             phases_data.append(max_phase_data.get("blockCnt", 0))
     elif int(owner_star) == 3:
         respawn_time = []
         phases_data = []
         for i in range(2):
-            phase_data = mapper.get_data_safe("character_table", f"{summon_key}.phases[{i}].attributesKeyFrames[0].data") if summon_key else {}
+            phase_data = _operator_phase_attr(mapper, i, 0) if summon_key else {}
             respawn_time.append(phase_data.get("respawnTime"))
-            max_phase_data = mapper.get_data_safe("character_table", f"{summon_key}.phases[{i}].attributesKeyFrames[1].data") if summon_key else {}
+            max_phase_data = _operator_phase_attr(mapper, i, 1) if summon_key else {}
             phases_data.append(max_phase_data.get("blockCnt", 0))
     elif int(owner_star) < 3:
         respawn_time = []
         phases_data = []
-        phase_data = mapper.get_data_safe("character_table", f"{summon_key}.phases[0].attributesKeyFrames[0].data") if summon_key else {}
+        phase_data = _operator_phase_attr(mapper, 0, 0) if summon_key else {}
         respawn_time.append(phase_data.get("respawnTime"))
-        max_phase_data = mapper.get_data_safe("character_table", f"{summon_key}.phases[0].attributesKeyFrames[1].data") if summon_key else {}
+        max_phase_data = _operator_phase_attr(mapper, 0, 1) if summon_key else {}
         phases_data.append(max_phase_data.get("blockCnt", 0))
     else:
         respawn_time, phases_data = [None] * 2
@@ -95,7 +110,7 @@ def render_summon_template_lines(
     time_block = respawn_time[0] if respawn_time and all(x == first for x in respawn_time) else ("s→".join(str(v) for v in respawn_time) if respawn_time else "")
     lines.append(f"|阻挡数={block}")
     lines.append(f"|再部署={time_block}S")
-    summon_phase_data = mapper.get_data_safe("character_table", f"{summon_key}.phases[0].attributesKeyFrames[0].data") if summon_key else {}
+    summon_phase_data = _operator_phase_attr(mapper, 0, 0) if summon_key else {}
     atk_speed = summon_phase_data.get("attackSpeed")
     atk_time = summon_phase_data.get("baseAttackTime")
     taunt_level = summon_phase_data.get("tauntLevel")
@@ -104,14 +119,16 @@ def render_summon_template_lines(
     lines.append(f"|嘲讽等级={taunt_level if taunt_level is not None else ''}")
     range_id_data = []
     for i in range(0, 3):
-        range_id = mapper.get_data_safe("character_table", f"{summon_key}.phases[{i}].rangeId") if summon_key else None
+        bind_phase_index(mapper, i)
+        range_id = mapper.get_data_safe("character_table", "operator_phase_range_id") if summon_key else None
         range_id_data.append(range_id)
     lines.append(f"|初始攻击范围={range_id_data[0] if range_id_data[0] else ''}")
     lines.append(f"|精1攻击范围={range_id_data[1] if range_id_data[1] else ''}")
     lines.append(f"|精2攻击范围={range_id_data[2] if range_id_data[2] else ''}")
 
     for i in range(1, 3):
-        talents_candidates = mapper.get_data_safe("character_table", f"{summon_key}.talents[{i-1}].candidates") if summon_key else []
+        bind_talent_group(mapper, i - 1)
+        talents_candidates = mapper.get_data_safe("character_table", "operator_talent_candidates") if summon_key else []
         for j in range(0, 6):
             talent, talent_condition, talent_description = [None] * 3
             if talents_candidates and len(talents_candidates) > j:
@@ -141,8 +158,12 @@ def render_summon_template_lines(
         lines.append(f"|天赋{i}攻击范围=")
 
     for i in range(1, 4):
-        skill_id = mapper.get_data_safe("character_table", f"{summon_key}.skills[{i-1}].skillId") if summon_key else None
-        summon_skill_data = mapper.get_data_safe("skill_table", f"{skill_id}.levels") if skill_id else None
+        bind_skill_index(mapper, i)
+        skill_id = mapper.get_data_safe("character_table", "operator_skill_id") if summon_key else None
+        summon_skill_data = None
+        if skill_id:
+            bind_skill_table_id(mapper, skill_id)
+            summon_skill_data = mapper.get_data_safe("skill_table", "skill_levels")
         summon_skill_name = summon_skill_data[i - 1].get("name") if summon_skill_data and len(summon_skill_data) > i - 1 else None
         skill_icon = summon_skill_data[i - 1].get("icon") if summon_skill_data and len(summon_skill_data) > i - 1 else None
         is_null_skill_icon = skill_icon if summon_skill_name != skill_icon else summon_skill_name
@@ -173,9 +194,10 @@ def render_summon_template_lines(
                     skill_consistent_time = int(rounded)
             skill_description = level_data.get("description")
             blackboard = level_data.get("blackboard", [])
-            lines.append(
-                f"|技能{i}描述{j}={process_description(skill_description, trait_candidates, rich_styles, term_description_dict, blackboard, term_index_cache).replace(r'\\n', '<br/>')}"
-            )
+            rendered_skill_desc = process_description(
+                skill_description, trait_candidates, rich_styles, term_description_dict, blackboard, term_index_cache
+            ).replace("\\n", "<br/>")
+            lines.append(f"|技能{i}描述{j}={rendered_skill_desc}")
             lines.append(f"|技能{i}技力消耗{j}={skill_consume if skill_consume is not None else ''}")
             lines.append(f"|技能{i}初始技力{j}={skill_init if skill_init is not None else ''}")
             lines.append(f"|技能{i}持续时间{j}={skill_consistent_time if skill_consistent_time is not None else ''}")

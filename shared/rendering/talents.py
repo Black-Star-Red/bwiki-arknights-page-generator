@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from arknights_toolbox.shared.rendering.description_parser import process_description
-from arknights_toolbox.shared.utils import PHASE
-from arknights_toolbox.shared.globals import POTENTIAL_SUFFIX
+from shared.rendering.description_parser import process_description
+from shared.utils import PHASE
+from shared.globals import POTENTIAL_SUFFIX
 
 def render_operator_talent_fields(
     mapper,
@@ -17,7 +17,7 @@ def render_operator_talent_fields(
     渲染主干员天赋模板字段，返回可直接 append/extend 的模板行列表。
     """
     lines: list[str] = []
-    talents_candidates = mapper.get_data_safe("character_table", "{talents}[*].candidates", default=[]) or []
+    talents_candidates = mapper.get_data_safe("character_table", "talent_candidates", default=[]) or []
     for i in range(1, 3):
         for j in range(0, 6):
             is_not_none = False

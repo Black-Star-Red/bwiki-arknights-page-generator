@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from arknights_toolbox.shared.globals import VOICE_ORDER
+from shared.globals import VOICE_ORDER
 
 
 def safe_get(data: Any, keys: list[Any], default: Any = None):

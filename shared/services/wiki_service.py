@@ -78,6 +78,12 @@ def upload_operator_portrait_if_enabled(
     headers: dict,
 ) -> None:
     """Fetch and upload operator portrait when enabled."""
+    operator_id = (operator_id or "").strip()
+    if not operator_id:
+        print(f"干员{operator_name}半身像,跳过（无 charId，无法拼接 CDN 地址）")
+        return
+    if not enabled:
+        return
     portrait_resp = requests_module.get(
         f"https://web.hycdn.cn/arknights/game/assets/char/portrait/{operator_id}.png",
         headers=headers,
@@ -85,13 +91,15 @@ def upload_operator_portrait_if_enabled(
     if portrait_resp.status_code == 200:
         site_obj = get_site_fn()
         if site_obj is not None:
-            if enabled:
-                file_obj = io.BytesIO(portrait_resp.content)
-                upload_fn(site_obj, file_obj, f"{operator_name}06.png")
+            file_obj = io.BytesIO(portrait_resp.content)
+            upload_fn(site_obj, file_obj, f"{operator_name}06.png")
         else:
             print("site创建失败")
     else:
-        print(f"干员{operator_name}半身像,获取失败")
+        print(
+            f"干员{operator_name}半身像,获取失败 "
+            f"(charId={operator_id} status={portrait_resp.status_code})"
+        )
 
 
 __all__ = [
