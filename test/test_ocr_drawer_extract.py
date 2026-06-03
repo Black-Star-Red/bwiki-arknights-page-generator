@@ -50,6 +50,79 @@ def test_extract_drawer_designer_ocr_typo_line():
     assert extract_drawer(text) == "StudioMontagne、m9nokuro（原案）"
 
 
+def test_extract_drawer_skips_single_char_label_fragment():
+    """「绑制」被拆成单独「制」时跳过，仍读取下一行画师名。"""
+    text = "绘制\n制\nLoWro\n专精\n情报"
+    assert extract_drawer(text) == "LoWro"
+
+
+def test_extract_drawer_after_fragment_does_not_read_further_lines():
+    """「制」后只试紧邻一行；无 LoWro 时不吃 009。"""
+    text = "绘制\n制\n009\nROanG\n专精\nx"
+    assert extract_drawer(text) is None
+
+
+def test_extract_drawer_draw_fragment_then_artist_like_taraxa():
+    """风絮：绘 + •二开，无顿号故只读一行；• 与 - 同样剥除；不收 *。"""
+    text = "绘\n\u2022二开\n*\n专精\n草药"
+    assert extract_drawer(text) == "二开"
+    assert "•" not in (extract_drawer(text) or "")
+
+
+def test_extract_drawer_ju_like_ocr_block():
+    """矩：绘 + ·虬墨一型，无顿号只读一行；· 剥除；不收 *。"""
+    text = "绘\n\u00b7虬墨一型\n*\n专精\n机械制造"
+    assert extract_drawer(text) == "虬墨一型"
+    assert "*" not in (extract_drawer(text) or "")
+    assert "·" not in (extract_drawer(text) or "")
+
+
+def test_extract_drawer_belone_like_ocr_block():
+    text = """
+P
+制
+LoWro
+009
+ROanG
+专精
+情报
+"""
+    assert extract_drawer(text) == "LoWro"
+
+
+def test_extract_drawer_weak_label_fragment_then_name():
+    """无完整「绘制」时，单行「制」作弱锚点并打日志。"""
+    msgs: list[str] = []
+
+    def warn(msg: str, *args: object) -> None:
+        msgs.append(msg % args if args else msg)
+
+    text = "制\nLoWro\n专精\n情报"
+    assert extract_drawer(text, warn=warn) == "LoWro"
+    assert any("weak_label" in m for m in msgs)
+
+
+def test_extract_drawer_rejects_single_char_artist_name():
+    """单字画师名（含 *）不再二次放宽采集，避免误收 OCR 噪点。"""
+    msgs: list[str] = []
+
+    def warn(msg: str, *args: object) -> None:
+        msgs.append(msg % args if args else msg)
+
+    text = "绘制\nK\n专精\nxxx"
+    assert extract_drawer(text, warn=warn) is None
+
+
+def test_label_fragment_never_becomes_drawer_name():
+    msgs: list[str] = []
+
+    def warn(msg: str, *args: object) -> None:
+        msgs.append(msg % args if args else msg)
+
+    assert extract_drawer("制\n专精\nx", warn=warn) is None
+    assert not any("制" in m and "name=制" in m for m in msgs)
+
+
 def test_extract_drawer_stops_before_skill_text_without_designer():
     """无原案时绘制后紧跟特性文案，不应吞进画师。"""
     text = """

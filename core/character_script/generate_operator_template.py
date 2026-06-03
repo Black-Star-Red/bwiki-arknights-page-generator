@@ -39,6 +39,7 @@ from shared.rendering import (
     render_operator_voice_template_lines,
     render_skill_materials,
     resolve_drawer_with_fallback,
+    render_operator_skin_template_lines,
     render_summon_template_lines,
 )
 from shared.services import (
@@ -94,6 +95,8 @@ def generate_template(
     character_num: int = 3,
     dynamic_start_ts: int | None = None,
     dynamic_end_ts: int | None = None,
+    activity_name: str | None = None,
+    activity_is_main_theme: bool = False,
 ):
     """
     生成干员模板
@@ -122,6 +125,8 @@ def generate_template(
         character_num=character_num,
         dynamic_start_ts=dynamic_start_ts,
         dynamic_end_ts=dynamic_end_ts,
+        activity_name=activity_name,
+        activity_is_main_theme=activity_is_main_theme,
     )
     if selected and not supplementary_data:
         return ""
@@ -363,18 +368,7 @@ def generate_template(
                 )
                 parts.append(f"|画师={drawer}")
 
-                parts.append("|皮肤=")
-                parts.append("|skin1动态id=")
-                parts.append("|皮肤2=")
-                parts.append("|skin2动态id=")
-                parts.append("|皮肤3=")
-                parts.append("|skin3动态id=")
-                parts.append("|皮肤4=")
-                parts.append("|skin4动态id=")
-                parts.append("|皮肤5=")
-                parts.append("|skin5动态id=")
-                parts.append("|皮肤6=")
-                parts.append("|skin6动态id=")
+                parts.extend(render_operator_skin_template_lines(mapper, Id))
                 parts.extend(
                 render_operator_dossier_fields(
                     mapper,

@@ -10,8 +10,11 @@ COLLAB_ACTIVITY_RE = re.compile(r"^【明日方舟\s*[×xX][^】]+】")
 
 
 def _load_module(name: str, rel_path: str):
+    import sys
+
     spec = importlib.util.spec_from_file_location(name, _root / rel_path)
     mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
     spec.loader.exec_module(mod)
     return mod
 
@@ -70,7 +73,10 @@ def test_collab_event_standard_pools_get_lian_label():
     """联动期内 新增干员仅「联」；活动奖励为「联、活」。"""
     assert build_corner_labels({"联动": True, "获取途径": "标准寻访"}) == ["联"]
     assert build_corner_labels(
-        {"联动": True, "获取途径": "活动获取、【泡影苍霆】活动获取"}
+        {"联动": True, "获取途径": "联动、联动寻访、【幽境狩人】寻访"}
+    ) == ["联"]
+    assert build_corner_labels(
+        {"联动": True, "获取途径": "【泡影苍霆】活动获取、活动获取、联动"}
     ) == ["联", "活"]
     assert build_corner_labels(
         {"联动": True, "获取途径": "标准寻访"},
@@ -79,7 +85,7 @@ def test_collab_event_standard_pools_get_lian_label():
     assert build_corner_labels(
         {
             "联动": True,
-            "获取途径": "活动获取、【泡影苍霆】活动获取",
+            "获取途径": "【泡影苍霆】活动获取、活动获取、联动",
         },
         alter_operator="char_409_1bison",
     ) == ["联", "活", "异"]

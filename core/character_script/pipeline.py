@@ -35,6 +35,8 @@ def run_character_pipeline(
     summon_charid: str | None = None,
     dynamic_start_ts: int | None = None,
     dynamic_end_ts: int | None = None,
+    activity_name: str | None = None,
+    activity_is_main_theme: bool = False,
 ) -> str:
     """
     供 GUI 与 CLI 共用的执行入口：配置日志 → DataMapper → generate_template。
@@ -82,6 +84,8 @@ def run_character_pipeline(
                 character_num=character_num,
                 dynamic_start_ts=dynamic_start_ts,
                 dynamic_end_ts=dynamic_end_ts,
+                activity_name=activity_name,
+                activity_is_main_theme=activity_is_main_theme,
             )
         script_log.info("stage_end run_id=%s stage=generate_template output_len=%d", run_id, len(tpl or ""))
         return tpl or ""

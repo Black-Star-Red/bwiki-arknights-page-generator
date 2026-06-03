@@ -7,6 +7,7 @@ import re
 from core.script_logging import log_info, log_warning
 from shared.globals import ACQUISITION_METHOD
 from shared.services import fetch_user_dynamics
+from shared.services.bilibili_service import BilibiliScanContext
 from shared.services.bilibili_supplementary_fetch import (
     discover_operator_names_from_bilibili,
     fetch_character_supplementary_for_names,
@@ -44,6 +45,7 @@ def discover_operator_names(
     *,
     dynamic_start_ts: int | None = None,
     dynamic_end_ts: int | None = None,
+    scan_ctx: BilibiliScanContext | None = None,
 ):
     """仅扫描 B 站动态，返回干员名列表（不 OCR）。"""
     return discover_operator_names_from_bilibili(
@@ -52,6 +54,7 @@ def discover_operator_names(
         character_num=character_num,
         dynamic_start_ts=dynamic_start_ts,
         dynamic_end_ts=dynamic_end_ts,
+        scan_ctx=scan_ctx,
         **_BILI_SCAN_KW,
     )
 
@@ -63,6 +66,7 @@ def fetch_supplementary_for_names(
     *,
     dynamic_start_ts: int | None = None,
     dynamic_end_ts: int | None = None,
+    scan_ctx: BilibiliScanContext | None = None,
 ):
     """对指定干员名完整抓取 B 站补充（含 OCR）。"""
     return fetch_character_supplementary_for_names(
@@ -71,6 +75,7 @@ def fetch_supplementary_for_names(
         names,
         dynamic_start_ts=dynamic_start_ts,
         dynamic_end_ts=dynamic_end_ts,
+        scan_ctx=scan_ctx,
         **_BILI_FETCH_KW,
     )
 

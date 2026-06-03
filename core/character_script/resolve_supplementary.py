@@ -43,6 +43,10 @@ from data.db import (
 from data.db.engine import resolve_database_settings
 
 from shared.collab_supplementary import enrich_collab_meta
+from shared.services.bilibili_service import (
+    BilibiliScanContext,
+    apply_gui_activity_obtain_path,
+)
 
 
 
@@ -50,6 +54,33 @@ from .bilibili_bridge import (
     discover_operator_names,
     fetch_supplementary_for_names,
 )
+
+
+def _bind_scan_ctx(
+    fetch_fn: Callable,
+    scan_ctx: BilibiliScanContext | None,
+) -> Callable:
+    if scan_ctx is None:
+        return fetch_fn
+
+    def wrapped(
+        mid: str,
+        headers: dict,
+        names: set[str] | list[str],
+        *,
+        dynamic_start_ts: int | None = None,
+        dynamic_end_ts: int | None = None,
+    ):
+        return fetch_fn(
+            mid,
+            headers,
+            names,
+            dynamic_start_ts=dynamic_start_ts,
+            dynamic_end_ts=dynamic_end_ts,
+            scan_ctx=scan_ctx,
+        )
+
+    return wrapped
 
 from .mapper_ops import (
     collect_cid_name_pairs,
@@ -124,6 +155,8 @@ def _discover_names_from_bilibili(
 
     has_activity_filter: bool,
 
+    scan_ctx: BilibiliScanContext | None = None,
+
 ) -> tuple[list[str], dict[str, dict[str, Any]]]:
     """
     名单始终优先从 B 站动态发现（仅解析预告行，不 OCR）。
@@ -142,6 +175,7 @@ def _discover_names_from_bilibili(
             discover_limit,
             dynamic_start_ts=dynamic_start_ts,
             dynamic_end_ts=dynamic_end_ts,
+            scan_ctx=scan_ctx,
         )
 
     if not names and use_db:
@@ -194,6 +228,10 @@ def resolve_supplementary_data(
 
     fetch_bilibili_fn: Callable | None = None,
 
+    activity_name: str | None = None,
+
+    activity_is_main_theme: bool = False,
+
 ) -> dict[str, dict[str, Any]]:
 
     """
@@ -226,6 +264,14 @@ def resolve_supplementary_data(
     fill_fields = settings.get("fill_fields") or required
 
     has_activity_filter = _has_activity_time_filter(dynamic_start_ts, dynamic_end_ts)
+
+    scan_ctx: BilibiliScanContext | None = None
+    if settings["fallback_bilibili"]:
+        scan_ctx = BilibiliScanContext(
+            gui_activity_name=(activity_name or "").strip() or None,
+            gui_activity_is_main_theme=bool(activity_is_main_theme),
+        )
+    fetch_bilibili = _bind_scan_ctx(fetch_bilibili, scan_ctx)
 
 
 
@@ -271,6 +317,10 @@ def resolve_supplementary_data(
 
             fetch_bilibili=fetch_bilibili,
 
+            activity_name=activity_name,
+
+            activity_is_main_theme=activity_is_main_theme,
+
         )
 
 
@@ -302,6 +352,8 @@ def resolve_supplementary_data(
         fetch_bilibili=fetch_bilibili,
 
         has_activity_filter=has_activity_filter,
+
+        scan_ctx=scan_ctx,
 
     )
 
@@ -351,6 +403,10 @@ def resolve_supplementary_data(
 
         bili_prefetch=bili_batch,
 
+        activity_name=activity_name,
+
+        activity_is_main_theme=activity_is_main_theme,
+
     )
 
 
@@ -389,8 +445,13 @@ def _resolve_for_names(
 
     bili_prefetch: dict[str, dict[str, Any]] | None = None,
 
+    activity_name: str | None = None,
+
+    activity_is_main_theme: bool = False,
+
 ) -> dict[str, dict[str, Any]]:
     del bili_prefetch, character_num  # 不再使用 discover 阶段预取
+    gui_activity = (activity_name or "").strip() or None
 
     result: dict[str, dict[str, Any]] = {}
     need_fetch: list[str] = []
@@ -410,7 +471,14 @@ def _resolve_for_names(
                 db_part = repo.get_by_char_id(cid)
 
         if use_db and db_part and not needs_supplementary_fetch(db_part, fill_fields):
-            result[name] = enrich_collab_meta(apply_db_with_bili_meta(db_part, None))
+            merged = enrich_collab_meta(apply_db_with_bili_meta(db_part, None))
+            if gui_activity:
+                merged = apply_gui_activity_obtain_path(
+                    merged,
+                    gui_activity,
+                    gui_activity_is_main_theme=activity_is_main_theme,
+                )
+            result[name] = merged
             missing = missing_supplementary_fields(db_part, fill_fields)
             log_info(
                 "补充数据来自数据库：%s（跳过 B 站抓取，fill 已齐 missing=%s）",
@@ -448,6 +516,11 @@ def _resolve_for_names(
         bili_part = bili_part_raw or empty_supplementary_dict()
         if _bili_key and _bili_key != name:
             log_info("补充数据 B 站键对齐 name=%s bili_key=%s", name, _bili_key)
+        if name in need_fetch and not has_meaningful_supplementary(bili_part):
+            log_warning(
+                "B 站未抓到有效补充数据 name=%s，将保留库内已有字段（若有）",
+                name,
+            )
         if db_part and has_meaningful_supplementary(db_part):
             merged = merge_supplementary(db_part, bili_part)
         elif has_meaningful_supplementary(bili_part):
@@ -455,7 +528,14 @@ def _resolve_for_names(
         else:
             merged = merge_supplementary(db_part, bili_part)
         merged = apply_bili_ocr_over_empty(merged, bili_part)
-        result[name] = enrich_collab_meta(merged)
+        merged = enrich_collab_meta(merged)
+        if gui_activity:
+            merged = apply_gui_activity_obtain_path(
+                merged,
+                gui_activity,
+                gui_activity_is_main_theme=activity_is_main_theme,
+            )
+        result[name] = merged
 
         sources: list[str] = []
         if db_part and has_meaningful_supplementary(db_part):

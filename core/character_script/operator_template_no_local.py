@@ -6,6 +6,7 @@ from shared.globals import VOICE_MAP
 from shared.rendering import (
     process_description,
     render_operator_dossier_fields,
+    render_operator_skin_template_lines,
     resolve_drawer_with_fallback,
 )
 from shared.rendering.voice import _CV_FIELD_SPECS
@@ -101,13 +102,7 @@ def build_operator_parts_without_local_json(
     parts.append("|分支=")
     parts.append(f"|精二动态id={value.get('动态id', '')}")
     parts.extend(_empty_progression_and_skill_placeholders())
-    parts.append("|皮肤=")
-    for i in range(1, 7):
-        if i == 1:
-            parts.append("|skin1动态id=")
-        else:
-            parts.append(f"|皮肤{i}=")
-            parts.append(f"|skin{i}动态id=")
+    parts.extend(render_operator_skin_template_lines(mapper, cid))
 
     rich_styles = mapper.get_data_safe("gamedata_const", "richTextStyles")
     term_description_dict = mapper.get_data_safe("gamedata_const", "termDescriptionDict")

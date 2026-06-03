@@ -10,6 +10,7 @@ from .summon import render_summon_template_lines
 from .talents import render_operator_talent_fields
 from .template_helpers import (
     build_drawer_from_skins,
+    render_operator_skin_template_lines,
     render_skill_materials,
     resolve_drawer_with_fallback,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "render_skill_materials",
     "build_drawer_from_skins",
     "resolve_drawer_with_fallback",
+    "render_operator_skin_template_lines",
     "Material",
     "LevelUPEnhance",
     "render_operator_progression_fields",

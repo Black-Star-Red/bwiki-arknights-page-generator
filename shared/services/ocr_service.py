@@ -279,73 +279,11 @@ def run_ocr(img):
     rec_texts = res.get("rec_texts") or []
     return "\n".join(rec_texts)
 
-def extract_mastery(text: str) -> str | None:
-    """取「专精」后的研究方向/技能列表；游戏 UI 与 OCR 常拆成多行，需合并。"""
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    # 遇到下一条档案字段标题则停止，避免把后面段落拼进专精
-    stop_line = re.compile(
-        r"^(精英化|等级|职业|分支|标签|综合体检测|初始开放|基建技能|特性|天赋|招聘合同|"
-        r"客观履历|临床诊断|造影检测|矿石病感染情况|体细胞与源石|血液源石结晶密度|"
-        r"物理强度|战场机动|生理耐受|战术规划|战斗技巧|后勤技能|源石技艺适应性|"
-        r"模组|潜能|再部署|部署费用|阻挡数|攻击范围|初始携带|"
-        r"身高|体重|性别|种族|生日|出身|中文CV|绘制|原案|中)"
-    )
-    max_follow = 12
-
-    for i, line in enumerate(lines):
-        if "专精" not in line and '、' not in line:
-            continue
-        chunks: list[str] = []
-
-        same = re.search(r"专精\s*[：:]\s*(.+)$", line)
-        temp= False
-        if same:
-            c = same.group(1).strip()
-            if c:
-                chunks.append(c)
-        elif re.fullmatch(r"专精\s*", line):
-            pass
-        else:
-            tail = re.search(r"专精(.+)$", line)
-            if tail:
-                c = tail.group(1).strip().lstrip("：:").strip()
-                if c:
-                    chunks.append(c)
-            elif not chunks and "、" in line and "专精" not in line:
-                if line.endswith("、"):
-                    chunks.append(line[:-1])
-                    temp = True
-                else:
-                    chunks.append(line)
-
-        j = i + 1
-        n = 0
-        while j < len(lines) and n < max_follow:
-            nxt = lines[j]
-            if stop_line.match(nxt) or nxt.isdigit():# or (检测到chunks[-1] 不是“、”结尾 则停止)
-                break
-            if len(nxt) < 2:
-                n += 1
-                j += 1
-                continue
-            if nxt.endswith("、"):
-                temp=True
-                chunks.append(nxt[:-1])
-            else:
-                chunks.append(nxt)
-            if not nxt.endswith("、") and temp == True:
-                break
-            n += 1
-            j += 1
-
-        if chunks:
-            return "、".join(chunks)
-    return None
-
-
 def ocr_operator_profile(img_path: str) -> dict[str, str]:
     """OCR 预告图：专精 + 画师（绘制、原案合成）。"""
-    from shared.ocr_profile_fields import extract_drawer
+    from core.script_logging import log_warning
+
+    from shared.ocr_profile_fields import extract_drawer, extract_mastery
 
     img = imread_unicode(img_path)
     if img is None:
@@ -374,7 +312,7 @@ def ocr_operator_profile(img_path: str) -> dict[str, str]:
         if m:
             mastery = m.group(1).strip()
 
-    drawer = extract_drawer(merged) or ""
+    drawer = extract_drawer(merged, warn=log_warning) or ""
     if mastery:
         print("专精 =", mastery)
     else:

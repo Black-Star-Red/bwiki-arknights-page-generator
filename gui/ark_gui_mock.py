@@ -140,6 +140,8 @@ class OperatorRunThread(QThread):
         character_num: int,
         dynamic_start_ts: int | None = None,
         dynamic_end_ts: int | None = None,
+        activity_name: str | None = None,
+        activity_is_main_theme: bool = False,
     ) -> None:
         super().__init__()
         self._config_path = config_path
@@ -153,6 +155,8 @@ class OperatorRunThread(QThread):
         self._character_num = character_num
         self._dynamic_start_ts = dynamic_start_ts
         self._dynamic_end_ts = dynamic_end_ts
+        self._activity_name = activity_name
+        self._activity_is_main_theme = activity_is_main_theme
     def run(self) -> None:
         # _project_root() = .../arknights_toolbox；import arknights_toolbox 需要仓库根在 sys.path
         pkg_root = _project_root()
@@ -184,6 +188,8 @@ class OperatorRunThread(QThread):
                 summon_charid=self._summon_charid,
                 dynamic_start_ts=self._dynamic_start_ts,
                 dynamic_end_ts=self._dynamic_end_ts,
+                activity_name=self._activity_name,
+                activity_is_main_theme=self._activity_is_main_theme,
             )
             self.succeeded.emit(tpl or "")
         except BaseException as e:
@@ -448,6 +454,10 @@ class ArknightsToolWindow(QWidget):
         wiki_sandbox = self.chk_wiki_test_page.isChecked()
         activity = self._selected_activity()
         by_activity = activity is not None
+        activity_name = activity.name if activity else None
+        activity_is_main_theme = (
+            activity.act_type == "TYPE_MAINSS" if activity else False
+        )
         character_num = self.chk_character_num.value()
         dynamic_start_ts = activity.start_ts if activity else None
         dynamic_end_ts = activity.end_ts if activity else None
@@ -501,6 +511,8 @@ class ArknightsToolWindow(QWidget):
             character_num=character_num,
             dynamic_start_ts=dynamic_start_ts,
             dynamic_end_ts=dynamic_end_ts,
+            activity_name=activity_name,
+            activity_is_main_theme=activity_is_main_theme,
         )
         self._run_thread.succeeded.connect(self._on_run_succeeded)
         self._run_thread.failed.connect(self._on_run_failed)
