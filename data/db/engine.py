@@ -24,7 +24,11 @@ def _dedupe_field_list(fields) -> list[str]:
             out.append(key)
     return out
 
-
+"""
+合并 database 配置与 supplementary 子项默认值。
+@param config: 配置
+@return: 数据库设置
+"""
 def resolve_database_settings(config: dict) -> dict[str, Any]:
     """合并 database 配置与 supplementary 子项默认值。"""
     raw = config.get("database") if isinstance(config.get("database"), dict) else {}
@@ -73,7 +77,12 @@ def _resolve_sqlite_url(url: str, *, config_path: str | Path | None) -> str:
     abs_path.parent.mkdir(parents=True, exist_ok=True)
     return f"sqlite:///{abs_path.as_posix()}"
 
-
+"""
+获取数据库引擎
+@param config: 配置
+@param config_path: 配置路径
+@return: 数据库引擎
+"""
 def get_engine(config: dict, *, config_path: str | Path | None = None):
     global _ENGINE
     settings = resolve_database_settings(config)

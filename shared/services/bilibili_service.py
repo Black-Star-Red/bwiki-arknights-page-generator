@@ -13,6 +13,8 @@ from bs4 import BeautifulSoup
 import json
 import requests
 
+from shared.collab_supplementary import pick_collab_gacha_pool
+
 def slice_json_object_after_key(text: str, key: str = "initialData") -> dict:
     # 常见：\"initialData\":{  或  "initialData":{
     markers = [f'\\"{key}\\":{{', f'"{key}":{{']
@@ -215,6 +217,11 @@ class BilibiliScanContext:
     gui_activity_name: str | None = None
     # GUI 活动为 TYPE_MAINSS（如「相变临界」）时，活动/主题曲奖励干员用主题曲获取途径
     gui_activity_is_main_theme: bool = False
+    # GUI 选中活动的 startTime（Unix 秒），无专栏日期时用于实装日（国内日历）
+    gui_activity_start_ts: int | None = None
+    gui_activity_end_ts: int | None = None
+    collab_gacha_pool_pub_ts: dict[str, int] = field(default_factory=dict)
+
     cached_activity_name: str | None = None
     cached_side_story: str | None = None
     cached_main_theme_activity_name: str | None = None
@@ -282,6 +289,9 @@ def _is_side_story_context(label: str | None) -> bool:
 def refresh_scan_activity_cache(
     scan_ctx: BilibiliScanContext | None,
     nodes: list[dict],
+    *,
+    is_collab_dynamic: bool = False,
+    pub_ts: int | None = None,
 ) -> None:
     """扫描 feed 时累积 SideStory 原文、活动名、联动池名（供后续预告动态共用）。"""
     if scan_ctx is None:
@@ -300,10 +310,15 @@ def refresh_scan_activity_cache(
         name = _extract_collab_event_title_from_nodes(nodes)
         if name and not scan_ctx.cached_activity_name:
             scan_ctx.cached_activity_name = name
-    pools = _extract_collab_gacha_pools_from_nodes(nodes)
-    if pools:
-        scan_ctx.cached_collab_gacha_pools |= pools
-
+    if is_collab_dynamic:
+        pools = _extract_collab_gacha_pools_from_nodes(nodes)
+        if pools:
+            scan_ctx.cached_collab_gacha_pools |= pools
+            if pub_ts is not None:
+                for pool in pools:
+                    prev = scan_ctx.collab_gacha_pool_pub_ts.get(pool)
+                    if prev is None or pub_ts < prev:
+                        scan_ctx.collab_gacha_pool_pub_ts[pool] = pub_ts
 
 def effective_side_story_for_hit(
     side_story: str | None,
@@ -326,13 +341,6 @@ def _activity_obtain_bracket_label(
     if name:
         return name
     return _side_story_activity_name(side_story)
-
-
-def pick_collab_gacha_pool(pools: set[str] | None) -> str | None:
-    """从联动公告解析出的限时池名集合中取一个稳定代表名。"""
-    if not pools:
-        return None
-    return sorted(pools)[0]
 
 
 def _is_main_theme_context(

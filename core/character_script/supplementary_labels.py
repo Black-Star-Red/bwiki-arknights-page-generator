@@ -5,7 +5,11 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from shared.collab_supplementary import enrich_collab_meta
+from shared.collab_supplementary import (
+    enrich_collab_meta,
+    is_collab_activity_reward_obtain,
+    wiki_obtain_path as _wiki_obtain_path,
+)
 
 # 与 bilibili_service 联动分支写入的获取途径一致（兜底解析卡池名）
 _COLLAB_OBTAIN_RE = re.compile(r"^联动、联动寻访、【([^】]+)】寻访")
@@ -20,6 +24,8 @@ def is_collaboration(value: dict[str, Any]) -> bool:
     if isinstance(flag, str) and flag.strip().lower() in ("1", "true", "yes"):
         return True
     if collab_pool_name(value):
+        return True
+    if is_collab_activity_reward_obtain(str(value.get("获取途径") or "")):
         return True
     return False
 
@@ -47,11 +53,19 @@ def _is_main_theme_obtain(obtain: str) -> bool:
 
 
 def collab_obtain_path(value: dict[str, Any]) -> str | None:
-    """联动干员标准 |获取途径= 文案。"""
+    """联动寻访类 |获取途径= 文案（活动/主题曲奖励类不覆盖）。"""
+    obtain = str(value.get("获取途径") or "").strip()
+    if _is_activity_reward_obtain(obtain) or _is_main_theme_obtain(obtain):
+        return None
     pool = collab_pool_name(value)
     if pool:
         return f"联动、联动寻访、【{pool}】寻访"
     return None
+
+
+def wiki_obtain_path(value: dict[str, Any]) -> str:
+    """Wiki |获取途径= 与入库回填共用（实现在 shared.collab_supplementary）。"""
+    return _wiki_obtain_path(value)
 
 
 def build_corner_labels(
@@ -102,4 +116,5 @@ __all__ = [
     "enrich_collab_meta",
     "is_collaboration",
     "is_limited_dynamic",
+    "wiki_obtain_path",
 ]

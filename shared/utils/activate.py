@@ -39,8 +39,12 @@ for basicInfo in json_data["basicInfo"].values():
             item["end_time"] = datetime.fromtimestamp(basicInfo["endTime"], timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             activity.append(item)
             with Session() as session:
-                session.add(Activity(name=item["name"], start_time=item["start_time"], end_time=item["end_time"]))
-                session.commit()
+                try:
+                    session.add(Activity(name=item["name"], start_time=item["start_time"], end_time=item["end_time"]))
+                    session.commit()
+                except Exception as e:
+                    session.rollback()
+                    print(e)
 print(activity)
 print(len(activity))
 

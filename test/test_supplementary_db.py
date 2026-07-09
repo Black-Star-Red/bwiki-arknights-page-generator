@@ -143,7 +143,7 @@ def test_merge_prefers_bili_when_db_is_standard_gacha():
     }
     merged = merge_supplementary(db, bili)
     assert merged["获取途径"] == "限定寻访、【承诺】限定寻访"
-    assert merged["实装日期"] == "2020-01-01"
+    assert merged["实装日期"] == "2026-01-01"
 
 
 def test_merge_bilibili_first_over_stale_db():
@@ -179,6 +179,31 @@ def test_apply_db_infers_collab_from_obtain_when_no_bili():
     out = apply_db_with_bili_meta(db, None)
     assert out["联动"] is True
     assert out["联动卡池"] == "幽境狩人"
+
+
+def test_supplementary_for_upsert_matches_wiki_obtain(sqlite_config):
+    from data.db.supplementary_repo import supplementary_for_upsert
+
+    activity = supplementary_for_upsert(
+        {
+            "获取途径": "活动获取、【泡影苍霆】活动获取",
+            "联动": True,
+            "联动卡池": "幽境狩人",
+        }
+    )
+    assert activity["获取途径"] == "活动获取、【泡影苍霆】活动获取"
+    gacha = supplementary_for_upsert(
+        {
+            "获取途径": "标准寻访",
+            "联动": True,
+            "联动卡池": "幽境狩人",
+            "实装日期": "",
+            "动态id": "",
+            "专精": "",
+            "宣传介绍": "",
+        }
+    )
+    assert gacha["获取途径"] == "联动、联动寻访、【幽境狩人】寻访"
 
 
 def test_apply_db_overrides_stale_standard_from_bili():

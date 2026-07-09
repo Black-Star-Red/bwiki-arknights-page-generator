@@ -8,8 +8,19 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
-
+from shared.collab_supplementary import (
+    collab_gacha_pools_at_or_before,
+    is_named_gacha_pool
+)
 import requests
+
+from shared.utils.format_date import (
+    CN_TZ,
+    format_zh_ymd,
+    normalize_zh_release_date,
+    zh_ymd_from_pool_article,
+    zh_ymd_from_unix_ts,
+)
 
 from .bilibili_service import (
     BILIBILI_PRE_START_SECONDS,
@@ -125,7 +136,13 @@ def _load_pool_view(
         rtime = summary.find("日")
         release = ""
         if ltime != -1 and rtime != -1 and rtime >= ltime:
-            release = summary[ltime + 5 : rtime + 1]
+            md_fragment = summary[ltime + 5 : rtime + 1]
+            pub_ts = article.get("publish_time")
+            try:
+                pub_ts = int(pub_ts) if pub_ts is not None else None
+            except (TypeError, ValueError):
+                pub_ts = None
+            release = zh_ymd_from_pool_article(pub_ts, md_fragment)
         data = [banner_type or "", release]
         pool_view[pool_key] = data
         pool_limited_ops[pool_key] = _extract_limited_operators_from_article_summary(
@@ -145,6 +162,7 @@ def _build_character_from_hit(
     log_info: Callable[[str, Any], None],
     scan_ctx: BilibiliScanContext | None = None,
 ) -> dict[str, Any]:
+    branch_name = "主分支"
     character: dict[str, Any] = {}
     name = hit.name
     text = hit.text
@@ -169,9 +187,8 @@ def _build_character_from_hit(
             character["画师"] = ""
             log_warning("预告图 OCR 失败（专精/画师），已降级为空 name=%s", name)
 
-    pools = set(hit.collab_gacha_pools)
-    if scan_ctx is not None:
-        pools |= scan_ctx.cached_collab_gacha_pools
+    op_ts = _dynamic_pub_ts(item)
+    pools = collab_gacha_pools_at_or_before(scan_ctx, op_ts)
     is_collab_dynamic = hit.is_collab
     named_collab_pool = bool(
         is_collab_dynamic
@@ -185,16 +202,40 @@ def _build_character_from_hit(
     gui_activity = (
         (scan_ctx.gui_activity_name or "").strip() if scan_ctx else ""
     )
+    # 联动期 × 池内「新增干员」：单条预告动态常无联动头，仅靠 GUI 活动窗 + 缓存池名识别
     collab_period_new_ops = bool(
-        not is_collab_dynamic
-        and gacha_pool == "新增干员"
+        gacha_pool == "新增干员"
         and bool(pools)
-        and not gui_activity
+        and not is_collab_dynamic
+        and (not gui_activity or bool(pools))
+    )
+    collab_period_activity_reward = bool(
+        gacha_pool == "活动奖励干员"
+        and not is_collab_dynamic
+        and gui_activity
+        and scan_ctx is not None
+        and not scan_ctx.gui_activity_is_main_theme
+        and (
+            scan_ctx.cached_collab_gacha_pools
+            or (scan_ctx.cached_activity_name or "").strip() == gui_activity
+            or gui_activity in (scan_ctx.cached_side_story or "")
+        )
     )
     release_time = None
     implementation_data = pool_view.get(gacha_pool)
-
-    if named_collab_pool:
+    named_pool_from_announce = (
+    not is_collab_dynamic
+    and is_named_gacha_pool(gacha_pool)
+)
+    if named_pool_from_announce:
+        branch_name = "分支：named_pool_from_announce"
+        character["联动"] = True
+        character["联动卡池"] = gacha_pool
+        character["获取途径"] = _obtain_path_for_gacha_pool(
+            gacha_pool, acquisition_method, collab=True
+        )
+    elif named_collab_pool:
+        branch_name = "分支：named_collab_pool"
         character["联动"] = True
         character["联动卡池"] = gacha_pool
         character["获取途径"] = _obtain_path_for_gacha_pool(
@@ -204,6 +245,7 @@ def _build_character_from_hit(
         if dynamic_id:
             character["动态id"] = dynamic_id
     elif collab_standard_pool:
+        branch_name = "分支：collab_standard_pool"
         character["联动"] = True
         reward_activity = (
             resolve_activity_reward_name(side_story=hit.side_story, scan_ctx=scan_ctx)
@@ -220,7 +262,9 @@ def _build_character_from_hit(
                 hit.side_story,
             )
         collab_pool = (
-            pick_collab_gacha_pool(pools) if gacha_pool == "新增干员" else None
+            pick_collab_gacha_pool(pools, gacha_pool=gacha_pool)
+            if gacha_pool == "新增干员"
+            else None
         )
         if collab_pool:
             character["联动卡池"] = collab_pool
@@ -240,6 +284,7 @@ def _build_character_from_hit(
     elif should_use_main_theme_reward_obtain(
         gacha_pool, hit.side_story, scan_ctx
     ):
+        branch_name = "分支：should_use_main_theme_reward_obtain"
         reward_activity = resolve_activity_reward_name(
             side_story=hit.side_story, scan_ctx=scan_ctx
         )
@@ -252,17 +297,27 @@ def _build_character_from_hit(
             hit.side_story,
         )
         character["获取途径"] = _main_theme_reward_obtain_path(reward_activity)
-    elif gacha_pool == "活动奖励干员":
+    elif collab_period_activity_reward or gacha_pool == "活动奖励干员":
+        branch_name = "分支：collab_period_activity_reward"
         reward_activity = resolve_activity_reward_name(
             side_story=hit.side_story, scan_ctx=scan_ctx
         )
-        log_info(
-            "activity_reward name=%s activity=%s gui=%s side_story=%s",
-            name,
-            reward_activity,
-            (scan_ctx.gui_activity_name if scan_ctx else None),
-            hit.side_story,
-        )
+        if collab_period_activity_reward:
+            character["联动"] = True
+            log_info(
+                "collab_period_activity_reward name=%s activity=%s gui=%s",
+                name,
+                reward_activity,
+                gui_activity,
+            )
+        else:
+            log_info(
+                "activity_reward name=%s activity=%s gui=%s side_story=%s",
+                name,
+                reward_activity,
+                (scan_ctx.gui_activity_name if scan_ctx else None),
+                hit.side_story,
+            )
         character["获取途径"] = _obtain_path_for_gacha_pool(
             "活动奖励干员",
             acquisition_method,
@@ -271,8 +326,9 @@ def _build_character_from_hit(
             activity_name=reward_activity,
         )
     elif collab_period_new_ops:
+        branch_name = "分支：collab_period_new_ops"
         character["联动"] = True
-        collab_pool = pick_collab_gacha_pool(pools)
+        collab_pool = pick_collab_gacha_pool(pools, gacha_pool=gacha_pool)
         if collab_pool:
             character["联动卡池"] = collab_pool
         character["获取途径"] = acquisition_method.get("新增干员", "标准寻访")
@@ -280,6 +336,7 @@ def _build_character_from_hit(
         pool_view.get(gacha_pool) is not None
         or pool_limited_ops.get(gacha_pool)
     ):
+        branch_name = "分支：pool_obtain_fallback"
         implementation_data = pool_view.get(gacha_pool) or ["", ""]
         if implementation_data[1] and implementation_data[1][0] == "0":
             implementation_data = [implementation_data[0], implementation_data[1][1:]]
@@ -307,6 +364,7 @@ def _build_character_from_hit(
         else:
             character["获取途径"] = acquisition_method.get("新增干员", "标准寻访")
     else:
+        branch_name = "分支：pool_obtain_fallback_no_article_match"
         log_info(
             "pool_obtain_fallback name=%s pool=%s (no article match)",
             name,
@@ -317,16 +375,30 @@ def _build_character_from_hit(
             acquisition_method,
             side_story=hit.side_story,
         )
-
+    log_info(
+        "bilibili_build_character name=%s gacha_pool=%s is_collab=%s branch=%s pools=%s",
+        name, gacha_pool, is_collab_dynamic, branch_name, sorted(pools),
+    )
     if release_time:
-        character["实装日期"] = (
-            f"[https://t.bilibili.com/{item['id_str']}?spm_id_from=333.1387.0.0 {release_time}]"
-        )
+        date_label = normalize_zh_release_date(release_time)
     else:
-        character["实装日期"] = (
-            f"[https://t.bilibili.com/{item['id_str']}?spm_id_from=333.1387.0.0 "
-            f"{datetime.now().strftime('%Y年%m月%d日')}]"
+        act_ts = (
+            scan_ctx.gui_activity_start_ts
+            if scan_ctx and scan_ctx.gui_activity_start_ts is not None
+            else None
         )
+        if act_ts is not None:
+            date_label = zh_ymd_from_unix_ts(act_ts)
+        else:
+            pub_ts = _dynamic_pub_ts(item)
+            if pub_ts is not None:
+                date_label = zh_ymd_from_unix_ts(pub_ts)
+            else:
+                now = datetime.now(tz=CN_TZ)
+                date_label = format_zh_ymd(now.year, now.month, now.day)
+    character["实装日期"] = (
+        f"[https://t.bilibili.com/{item['id_str']}?spm_id_from=333.1387.0.0 {date_label}]"
+    )
     intro = text[text.rfind("_") + 2 :].rstrip("\n")
     intro = intro.replace("\n", "<br/>\n")
     character["宣传介绍"] = intro.replace(
@@ -375,6 +447,7 @@ def _prefill_activity_cache_from_feed(
         on_hit=on_hit,
         scan_ctx=scan_ctx,
         cache_only=True,
+        scan_phase="预填活动",
     )
     if scan_ctx.cached_side_story or scan_ctx.cached_activity_name:
         log_info(
@@ -386,6 +459,56 @@ def _prefill_activity_cache_from_feed(
     else:
         log_warning(
             "bilibili_activity_cache prefill empty start=%s end=%s",
+            dynamic_start_ts,
+            dynamic_end_ts,
+        )
+
+
+def _prefill_collab_gacha_pools_from_feed(
+    mid: str,
+    headers: dict[str, str],
+    scan_ctx: BilibiliScanContext,
+    *,
+    announce_line_re: re.Pattern[str],
+    collab_activity_re: re.Pattern[str] | None,
+    dynamic_start_ts: int | None,
+    dynamic_end_ts: int | None,
+    log_warning: Callable[[str, Any], None],
+    log_info: Callable[[str, Any], None],
+) -> None:
+    """GUI 已选联动活动时预扫 feed，仅 × 联动动态累积限时寻访池名。"""
+    if not (scan_ctx.gui_activity_name or "").strip():
+        return
+
+    def on_hit(_hit: _AnnounceHit) -> bool:
+        return True
+
+    scan_ctx.cached_collab_gacha_pools.clear()
+    _scan_announces(
+        mid,
+        headers,
+        announce_line_re=announce_line_re,
+        collab_activity_re=collab_activity_re,
+        character_num=1,
+        dynamic_start_ts=dynamic_start_ts,
+        dynamic_end_ts=dynamic_end_ts,
+        log_warning=log_warning,
+        log_info=log_info,
+        on_hit=on_hit,
+        scan_ctx=scan_ctx,
+        cache_only=True,
+        scan_phase="预填联动池",
+    )
+    if scan_ctx.cached_collab_gacha_pools:
+        log_info(
+            "bilibili_collab_pool_cache gui=%s pools=%s",
+            scan_ctx.gui_activity_name,
+            sorted(scan_ctx.cached_collab_gacha_pools),
+        )
+    else:
+        log_warning(
+            "bilibili_collab_pool_cache empty gui=%s start=%s end=%s",
+            scan_ctx.gui_activity_name,
             dynamic_start_ts,
             dynamic_end_ts,
         )
@@ -406,6 +529,7 @@ def _scan_announces(
     scan_ctx: BilibiliScanContext | None = None,
     cache_only: bool = False,
     fetch_targets: set[str] | None = None,
+    scan_phase: str = "",
 ) -> dict[str, int]:
     """
     扫描动态 feed，对每个干员预告调用 on_hit(hit)。
@@ -486,7 +610,26 @@ def _scan_announces(
                 if is_collab:
                     collab_gacha_pools |= _extract_collab_gacha_pools_from_nodes(nodes)
                 side_story = _extract_side_story_from_nodes(nodes)
-                refresh_scan_activity_cache(scan_ctx, nodes)
+                pub_ts = _dynamic_pub_ts(item)
+                refresh_scan_activity_cache(
+                    scan_ctx, nodes, is_collab_dynamic=is_collab, pub_ts=pub_ts
+                )
+                #日志记录
+                new_pools = _extract_collab_gacha_pools_from_nodes(nodes)
+                if new_pools:
+                    pub_ts = _dynamic_pub_ts(item)
+                    log_info(
+                        "bilibili_pools_seen phase=%s dyn_id=%s pub_ts=%s pub_date=%s "
+                        "new=%s local_after=%s cached_after=%s",
+                        scan_phase,  # 见下文
+                        item_id,
+                        pub_ts,
+                        zh_ymd_from_unix_ts(pub_ts) if pub_ts else None,
+                        sorted(new_pools),
+                        sorted(collab_gacha_pools | new_pools),
+                        sorted(scan_ctx.cached_collab_gacha_pools | new_pools) if scan_ctx else None,
+                    )
+                
                 if (
                     cache_only
                     and scan_ctx is not None
@@ -596,6 +739,7 @@ def discover_operator_names_from_bilibili(
         log_info=log_info,
         on_hit=on_hit,
         scan_ctx=scan_ctx,
+        scan_phase="发现干员",
     )
     log_info(
         "bilibili_discover_names count=%s names=%s announce_hits=%s",
@@ -718,6 +862,7 @@ def fetch_character_supplementary_for_names(
         on_hit=on_hit,
         scan_ctx=scan_ctx,
         fetch_targets=targets,
+        scan_phase="抓取干员",
     )
     missing = sorted(targets - set(result.keys()))
     if missing:

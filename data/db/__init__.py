@@ -20,6 +20,7 @@ from .supplementary_repo import (
     needs_supplementary_fetch,
     missing_supplementary_fields,
     supplementary_for_upsert,
+    supplementary_payload_changed,
 )
 
 __all__ = [
@@ -38,6 +39,7 @@ __all__ = [
     "normalize_supplementary_name_key",
     "resolve_supplementary_batch_key",
     "supplementary_for_upsert",
+    "supplementary_payload_changed",
     "merge_supplementary",
     "merge_supplementary_bilibili_first",
     "row_to_dict",

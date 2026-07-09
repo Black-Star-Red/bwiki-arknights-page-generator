@@ -65,7 +65,7 @@ from .mapper_ops import (
     set_current_char_id,
     sub_profession_name,
 )
-from .supplementary_labels import build_corner_labels, collab_obtain_path, is_limited_dynamic
+from .supplementary_labels import build_corner_labels, is_limited_dynamic, wiki_obtain_path
 from .resolve_supplementary import resolve_supplementary_data
 from .operator_template_no_local import (
     _empty_voice_template_lines,
@@ -211,7 +211,7 @@ def generate_template(
                     alter_operator = None
                     char_name = ""
                 set_current_char_id(mapper, Id)
-                obtain = collab_obtain_path(value) or value.get("获取途径") or ""
+                obtain = wiki_obtain_path(value)
                 label = build_corner_labels(value, alter_operator=alter_operator)
                 if label:
                     parts.append("|角标=" + "、".join(label))

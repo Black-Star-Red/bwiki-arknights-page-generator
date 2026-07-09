@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -33,7 +33,9 @@ class ActivityRecord:
 
 
 def _format_ts(ts: int) -> str:
-    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+    from shared.utils.format_date import format_ts_cn_date
+
+    return format_ts_cn_date(ts)
 
 
 def parse_activities_from_table(

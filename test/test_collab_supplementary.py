@@ -23,6 +23,7 @@ _collab_shared = _load_module("collab_supplementary", "shared/collab_supplementa
 _labels = _load_module("supplementary_labels", "core/character_script/supplementary_labels.py")
 _bili = _load_module("bilibili_service", "shared/services/bilibili_service.py")
 
+apply_collab_period = _collab_shared.apply_collab_period_supplementary_meta
 build_corner_labels = _labels.build_corner_labels
 enrich_collab_meta = _collab_shared.enrich_collab_meta
 is_collaboration = _labels.is_collaboration
@@ -91,6 +92,54 @@ def test_collab_event_standard_pools_get_lian_label():
     ) == ["联", "活", "异"]
 
 
+def test_apply_collab_period_fixes_wrong_cached_pool_in_obtain():
+    ctx = _bili.BilibiliScanContext(
+        gui_activity_name="泡影苍霆",
+        cached_collab_gacha_pools={"幽境狩人"},
+    )
+    out = apply_collab_period(
+        {
+            "联动": True,
+            "联动卡池": "定向甄选",
+            "获取途径": "联动、联动寻访、【定向甄选】寻访",
+        },
+        ctx,
+    )
+    assert out["联动卡池"] == "幽境狩人"
+    assert out["获取途径"] == "联动、联动寻访、【幽境狩人】寻访"
+
+
+def test_apply_collab_period_marks_activity_reward_with_gui_name():
+    ctx = _bili.BilibiliScanContext(
+        gui_activity_name="泡影苍霆",
+        cached_collab_gacha_pools={"幽境狩人"},
+    )
+    out = apply_collab_period(
+        {"获取途径": "活动获取、【泡影苍霆】活动获取"},
+        ctx,
+    )
+    assert out["联动"] is True
+    assert out["获取途径"] == "活动获取、【泡影苍霆】活动获取"
+    assert build_corner_labels(out) == ["联", "活"]
+
+
+def test_apply_collab_period_meta_for_db_standard_gacha():
+    ctx = _bili.BilibiliScanContext(
+        gui_activity_name="泡影苍霆",
+        cached_collab_gacha_pools={"幽境狩人"},
+    )
+    out = apply_collab_period(
+        {"获取途径": "标准寻访", "实装日期": "x"},
+        ctx,
+    )
+    assert out["联动"] is True
+    assert out["联动卡池"] == "幽境狩人"
+    assert build_corner_labels(out, alter_operator="char_278_orchid") == [
+        "联",
+        "异",
+    ]
+
+
 def test_build_corner_labels_collab():
     value = {
         "联动": True,
@@ -101,6 +150,27 @@ def test_build_corner_labels_collab():
     assert build_corner_labels(value) == ["联"]
     assert build_corner_labels(value, alter_operator="char_123") == ["联", "异"]
     assert not is_limited_dynamic(value)
+
+
+def test_wiki_obtain_path_keeps_activity_reward_with_collab_pool():
+    wiki = _labels.wiki_obtain_path
+    value = {
+        "联动": True,
+        "联动卡池": "幽境狩人",
+        "获取途径": "活动获取、【泡影苍霆】活动获取",
+    }
+    assert wiki(value) == "活动获取、【泡影苍霆】活动获取"
+    assert _labels.collab_obtain_path(value) is None
+
+
+def test_wiki_obtain_path_uses_collab_pool_for_standard_gacha():
+    wiki = _labels.wiki_obtain_path
+    value = {
+        "联动": True,
+        "联动卡池": "幽境狩人",
+        "获取途径": "标准寻访",
+    }
+    assert wiki(value) == "联动、联动寻访、【幽境狩人】寻访"
 
 
 def test_build_corner_labels_limited():

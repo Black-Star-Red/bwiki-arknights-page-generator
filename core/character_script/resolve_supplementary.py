@@ -37,12 +37,13 @@ from data.db import (
     missing_supplementary_fields,
 
     supplementary_for_upsert,
+    supplementary_payload_changed,
 
 )
 
 from data.db.engine import resolve_database_settings
 
-from shared.collab_supplementary import enrich_collab_meta
+from shared.collab_supplementary import apply_collab_period_supplementary_meta, enrich_collab_meta
 from shared.services.bilibili_service import (
     BilibiliScanContext,
     apply_gui_activity_obtain_path,
@@ -51,6 +52,8 @@ from shared.services.bilibili_service import (
 
 
 from .bilibili_bridge import (
+    ANNOUNCE_LINE_RE,
+    COLLAB_ACTIVITY_RE,
     discover_operator_names,
     fetch_supplementary_for_names,
 )
@@ -115,6 +118,36 @@ def _match_operator_names(mapper, operator_filter: str) -> list[str]:
 
 
 
+
+
+def _warm_collab_scan_cache(
+    mid: str,
+    headers: dict,
+    scan_ctx: BilibiliScanContext | None,
+    *,
+    dynamic_start_ts: int | None,
+    dynamic_end_ts: int | None,
+) -> None:
+    """指定 GUI 联动活动时预扫 feed，填充 cached_collab_gacha_pools（单干员路径也走）。"""
+    if scan_ctx is None:
+        return
+    if not (scan_ctx.gui_activity_name or "").strip():
+        return
+    from shared.services.bilibili_supplementary_fetch import (
+        _prefill_collab_gacha_pools_from_feed,
+    )
+
+    _prefill_collab_gacha_pools_from_feed(
+        mid,
+        headers,
+        scan_ctx,
+        announce_line_re=ANNOUNCE_LINE_RE,
+        collab_activity_re=COLLAB_ACTIVITY_RE,
+        dynamic_start_ts=dynamic_start_ts,
+        dynamic_end_ts=dynamic_end_ts,
+        log_warning=log_warning,
+        log_info=log_info,
+    )
 
 
 def _has_activity_time_filter(
@@ -270,6 +303,16 @@ def resolve_supplementary_data(
         scan_ctx = BilibiliScanContext(
             gui_activity_name=(activity_name or "").strip() or None,
             gui_activity_is_main_theme=bool(activity_is_main_theme),
+            gui_activity_start_ts=(
+                dynamic_start_ts
+                if (activity_name or "").strip() and dynamic_start_ts is not None
+                else None
+            ),
+            gui_activity_end_ts=(
+                dynamic_end_ts
+                if (activity_name or "").strip() and dynamic_end_ts is not None
+                else None
+            ),
         )
     fetch_bilibili = _bind_scan_ctx(fetch_bilibili, scan_ctx)
 
@@ -320,6 +363,8 @@ def resolve_supplementary_data(
             activity_name=activity_name,
 
             activity_is_main_theme=activity_is_main_theme,
+
+            scan_ctx=scan_ctx,
 
         )
 
@@ -407,6 +452,8 @@ def resolve_supplementary_data(
 
         activity_is_main_theme=activity_is_main_theme,
 
+        scan_ctx=scan_ctx,
+
     )
 
 
@@ -449,9 +496,18 @@ def _resolve_for_names(
 
     activity_is_main_theme: bool = False,
 
+    scan_ctx: BilibiliScanContext | None = None,
+
 ) -> dict[str, dict[str, Any]]:
     del bili_prefetch, character_num  # 不再使用 discover 阶段预取
     gui_activity = (activity_name or "").strip() or None
+    _warm_collab_scan_cache(
+        mid,
+        headers,
+        scan_ctx,
+        dynamic_start_ts=dynamic_start_ts,
+        dynamic_end_ts=dynamic_end_ts,
+    )
 
     result: dict[str, dict[str, Any]] = {}
     need_fetch: list[str] = []
@@ -472,6 +528,7 @@ def _resolve_for_names(
 
         if use_db and db_part and not needs_supplementary_fetch(db_part, fill_fields):
             merged = enrich_collab_meta(apply_db_with_bili_meta(db_part, None))
+            merged = apply_collab_period_supplementary_meta(merged, scan_ctx)
             if gui_activity:
                 merged = apply_gui_activity_obtain_path(
                     merged,
@@ -485,6 +542,21 @@ def _resolve_for_names(
                 name,
                 missing,
             )
+            if (
+                use_db
+                and settings["write_after_fallback"]
+                and has_meaningful_supplementary(merged)
+                and supplementary_payload_changed(merged, db_part)
+            ):
+                cid = cid_by_name.get(name) or resolve_operator_char_id_for_name(
+                    mapper, name, stored_char_id=repo.get_char_id_by_name(name)
+                )
+                repo.upsert(
+                    name,
+                    supplementary_for_upsert(merged),
+                    char_id=cid,
+                    source="gui_reconcile",
+                )
             continue
         need_fetch.append(name)
 
@@ -529,6 +601,7 @@ def _resolve_for_names(
             merged = merge_supplementary(db_part, bili_part)
         merged = apply_bili_ocr_over_empty(merged, bili_part)
         merged = enrich_collab_meta(merged)
+        merged = apply_collab_period_supplementary_meta(merged, scan_ctx)
         if gui_activity:
             merged = apply_gui_activity_obtain_path(
                 merged,

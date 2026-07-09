@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -17,9 +18,10 @@ if TYPE_CHECKING:
 
 
 def _ts_to_datetime(ts: int | None) -> datetime | None:
+    """存库用 naive UTC 时刻（与游戏 startTime Unix 秒一致）。"""
     if ts is None:
         return None
-    return datetime.fromtimestamp(int(ts), tz=timezone.utc).replace(tzinfo=None)
+    return datetime.fromtimestamp(int(ts), tz=ZoneInfo("UTC")).replace(tzinfo=None)
 
 
 def _datetime_to_ts(dt: datetime | None) -> int | None:

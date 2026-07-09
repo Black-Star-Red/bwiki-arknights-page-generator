@@ -54,7 +54,7 @@ def _inline_has_multiple_artists(inline_tail: str) -> bool:
     return "、" in tail or "，" in tail or "," in tail
 
 
-_DRAW_LABEL_RE = re.compile(r"^(?:绘制|绑制)\s*[：:]?\s*(.*)$", re.I)
+_DRAW_LABEL_RE = re.compile(r"^[\sO0o○●◯]*(?:绘制|绑制)\s*[：:]?\s*(.*)$", re.I)
 _DESIGN_LABEL_RE = re.compile(r"^原案\s*[：:]?\s*(.*)$", re.I)
 
 # OCR 预告图：绘制/原案 后常接档案其它字段
@@ -411,7 +411,7 @@ def _is_mastery_label_line(line: str) -> bool:
     core = _mastery_label_core(line)
     if not core:
         return False
-    if re.match(r"^专精[\s·•・\*＊\-–—：:]*$", core):
+    if re.match(r"^[\s·•・\*＊\+\-–—：:]*专精[\s·•・\*＊\+\-–—：:]*$", core):
         return True
     return bool(re.match(r"^专精\s*[：:]", core))
 

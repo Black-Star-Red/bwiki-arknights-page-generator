@@ -10,7 +10,8 @@ from sqlalchemy import select
 
 from core.script_logging import log_info, log_warning
 
-from shared.collab_supplementary import enrich_collab_meta
+from shared.collab_supplementary import enrich_collab_meta, wiki_obtain_path
+from shared.utils.format_date import normalize_supplementary_release_date
 
 from .engine import get_session_factory, resolve_database_settings
 from .models import OperatorSupplementary
@@ -97,8 +98,27 @@ def apply_bili_ocr_over_empty(
 
 
 def supplementary_for_upsert(sup: dict[str, Any]) -> dict[str, str]:
-    """仅保留可入库的补充字段（中文键）。"""
-    return {k: str(sup.get(k) or "").strip() for k in SUPPLEMENTARY_KEYS}
+    """仅保留可入库的补充字段（中文键）；获取途径与 Wiki 展示一致。"""
+    out = {k: str(sup.get(k) or "").strip() for k in SUPPLEMENTARY_KEYS}
+    out["获取途径"] = wiki_obtain_path(sup)
+    if out.get("实装日期"):
+        out["实装日期"] = normalize_supplementary_release_date(out["实装日期"])
+    return out
+
+
+def supplementary_payload_changed(
+    merged: dict[str, Any],
+    db_part: dict[str, Any] | None,
+) -> bool:
+    """合并结果与库内可入库字段是否不一致（用于 GUI/联动校正后回写）。"""
+    return supplementary_for_upsert(merged) != supplementary_for_upsert(db_part or {})
+
+
+def _normalize_merged_release_date(out: dict[str, Any]) -> dict[str, Any]:
+    rd = (out.get("实装日期") or "").strip()
+    if rd:
+        out["实装日期"] = normalize_supplementary_release_date(rd)
+    return out
 
 
 def _is_generic_acquire_path(path: str) -> bool:
@@ -115,7 +135,7 @@ def row_to_dict(row: OperatorSupplementary | None) -> dict[str, str]:
         return empty_supplementary_dict()
     return {
         "获取途径": row.acquisition_path or "",
-        "实装日期": row.release_date or "",
+        "实装日期": normalize_supplementary_release_date(row.release_date or ""),
         "动态id": row.dynamic_id or "",
         "专精": row.specialization or "",
         "画师": getattr(row, "drawer", None) or "",
@@ -134,6 +154,8 @@ def merge_supplementary(
         bv = (bili_part or {}).get(key) or ""
         if key == "获取途径" and _is_generic_acquire_path(str(dv)) and str(bv).strip():
             out[key] = str(bv)
+        elif key == "实装日期" and str(bv).strip():
+            out[key] = normalize_supplementary_release_date(str(bv))
         else:
             out[key] = dv if str(dv).strip() else str(bv or "")
     if bili_part:
@@ -142,7 +164,7 @@ def merge_supplementary(
         pool = (bili_part.get("联动卡池") or "").strip()
         if pool:
             out["联动卡池"] = pool
-    return out
+    return _normalize_merged_release_date(out)
 
 
 def merge_supplementary_bilibili_first(
@@ -161,7 +183,7 @@ def merge_supplementary_bilibili_first(
         pool = (bili_part.get("联动卡池") or "").strip()
         if pool:
             out["联动卡池"] = pool
-    return enrich_collab_meta(out)
+    return _normalize_merged_release_date(enrich_collab_meta(out))
 
 
 def apply_db_with_bili_meta(
@@ -171,7 +193,7 @@ def apply_db_with_bili_meta(
     """库内完整记录为主，保留 B 站侧的联动等元数据。"""
     out = dict(db_part)
     if not bili_part:
-        return enrich_collab_meta(out)
+        return _normalize_merged_release_date(enrich_collab_meta(out))
     bili_obtain = (bili_part.get("获取途径") or "").strip()
     db_obtain = (out.get("获取途径") or "").strip()
     if bili_obtain and _is_generic_acquire_path(db_obtain) and not _is_generic_acquire_path(
@@ -183,7 +205,7 @@ def apply_db_with_bili_meta(
     pool = (bili_part.get("联动卡池") or "").strip()
     if pool:
         out["联动卡池"] = pool
-    return enrich_collab_meta(out)
+    return _normalize_merged_release_date(enrich_collab_meta(out))
 
 
 def is_supplementary_complete(

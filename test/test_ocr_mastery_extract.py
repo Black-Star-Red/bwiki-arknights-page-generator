@@ -35,3 +35,8 @@ def test_extract_mastery_ignores_orphan_dun_line():
     """无「专精」标签的 ·、 行不得单独成专精。"""
     text = "\u00b7、\n绘制\nStudio\n专精\n全领域工程"
     assert extract_mastery(text) == "全领域工程"
+
+def test_extract_mastery_plus_wrapped_label_line():
+    """「专精」标签行首 + 后接标签的 “+” 时，正常解析。"""
+    text = "+专精+\n应用源石学、\n信息与计算科学"
+    assert extract_mastery(text) == "应用源石学、信息与计算科学"

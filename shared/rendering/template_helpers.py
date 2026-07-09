@@ -76,17 +76,18 @@ def resolve_drawer_with_fallback(
     2. 其它数据源组 skin_table
     3. 补充库 / OCR 写入的「画师」字段（db_drawer）
     """
-    drawer = build_drawer_from_skins(mapper, char_id)
-    if drawer.strip():
-        return drawer
-    other_keys = [
-        k for k in mapper.config["data_sources"].keys() if k != mapper.current_data_sources
-    ]
-    for alt in other_keys:
-        with mapper.temporary_source_group(alt):
-            drawer = build_drawer_from_skins(mapper, char_id)
-            if drawer.strip():
-                return drawer
+    if id !="":
+        drawer = build_drawer_from_skins(mapper, char_id)
+        if drawer.strip():
+            return drawer
+        other_keys = [
+            k for k in mapper.config["data_sources"].keys() if k != mapper.current_data_sources
+        ]
+        for alt in other_keys:
+            with mapper.temporary_source_group(alt):
+                drawer = build_drawer_from_skins(mapper, char_id)
+                if drawer.strip():
+                    return drawer
     return (db_drawer or "").strip()
 
 

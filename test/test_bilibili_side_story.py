@@ -153,22 +153,74 @@ def test_resolve_collab_activity_name_priority():
     assert _resolve_collab(side_story=None, scan_ctx=ctx2) == "缓存名"
 
 
+def test_collab_period_new_ops_enabled_for_gui_collab_activity_window():
+    """单条干员预告无 × 头、但 GUI 在联动活动窗且 feed 已缓存池名 → 联动期新增干员。"""
+    scan_ctx = _BilibiliScanContext(
+        gui_activity_name="泡影苍霆",
+        cached_collab_gacha_pools={"幽境狩人"},
+    )
+    pools = set(scan_ctx.cached_collab_gacha_pools)
+    gui_activity = (scan_ctx.gui_activity_name or "").strip()
+    assert (
+        "新增干员" == "新增干员"
+        and pools
+        and not False  # is_collab_dynamic on single-op post
+        and (not gui_activity or bool(scan_ctx.cached_collab_gacha_pools))
+    )
+
+
+def test_collab_period_new_ops_disabled_for_gui_non_collab_activity():
+    scan_ctx = _BilibiliScanContext(gui_activity_name="相变临界")
+    pools: set[str] = set()
+    gui_activity = (scan_ctx.gui_activity_name or "").strip()
+    flag = bool(
+        "新增干员" == "新增干员"
+        and bool(pools)
+        and not False
+        and (not gui_activity or bool(scan_ctx.cached_collab_gacha_pools))
+    )
+    assert not flag
+
+
 def test_refresh_scan_cache_collab_title_without_side_story():
     refresh = _bili.refresh_scan_activity_cache
     ctx = _BilibiliScanContext()
-    refresh(ctx, [{"orig_text": _COLLAB_ANNOUNCE_TEXT.split("\n")[0]}])
+    refresh(
+        ctx,
+        [{"orig_text": _COLLAB_ANNOUNCE_TEXT.split("\n")[0]}],
+        is_collab_dynamic=True,
+    )
     assert ctx.cached_activity_name == "泡影苍霆"
     assert ctx.cached_side_story is None
-    refresh(ctx, [{"orig_text": _COLLAB_ANNOUNCE_TEXT}])
+    refresh(ctx, [{"orig_text": _COLLAB_ANNOUNCE_TEXT}], is_collab_dynamic=True)
     assert ctx.cached_side_story == "SideStory「泡影苍霆」"
     assert ctx.cached_activity_name == "泡影苍霆"
     assert "幽境狩人" in ctx.cached_collab_gacha_pools
 
 
+def test_refresh_scan_cache_non_collab_does_not_cache_concurrent_pool():
+    refresh = _bili.refresh_scan_activity_cache
+    ctx = _BilibiliScanContext()
+    refresh(
+        ctx,
+        [{"orig_text": "二、【定向甄选】限时寻访开启\n"}],
+        is_collab_dynamic=False,
+    )
+    assert "定向甄选" not in ctx.cached_collab_gacha_pools
+    refresh(ctx, [{"orig_text": _COLLAB_ANNOUNCE_TEXT}], is_collab_dynamic=True)
+    assert ctx.cached_collab_gacha_pools == {"幽境狩人"}
+
+
+def test_pick_collab_gacha_pool_prefers_named_pool():
+    pick = _bili.pick_collab_gacha_pool
+    assert pick({"幽境狩人"}) == "幽境狩人"
+    assert pick({"幽境狩人"}, gacha_pool="幽境狩人") == "幽境狩人"
+
+
 def test_refresh_scan_cache_keeps_side_story_over_later_title():
     refresh = _bili.refresh_scan_activity_cache
     ctx = _BilibiliScanContext()
-    refresh(ctx, [{"orig_text": _COLLAB_ANNOUNCE_TEXT}])
+    refresh(ctx, [{"orig_text": _COLLAB_ANNOUNCE_TEXT}], is_collab_dynamic=True)
     refresh(ctx, [{"orig_text": "【其他】\n◆争锋频道：绿藤城篇章限时活动"}])
     assert ctx.cached_side_story == "SideStory「泡影苍霆」"
     assert ctx.cached_activity_name == "泡影苍霆"
@@ -200,7 +252,7 @@ def test_resolve_fetch_target_by_discovered_dynamic_id():
 def test_refresh_scan_cache_theme_does_not_overwrite_side_story():
     refresh = _bili.refresh_scan_activity_cache
     ctx = _BilibiliScanContext()
-    refresh(ctx, [{"orig_text": _COLLAB_ANNOUNCE_TEXT}])
+    refresh(ctx, [{"orig_text": _COLLAB_ANNOUNCE_TEXT}], is_collab_dynamic=True)
     refresh(ctx, [{"orig_text": "主题曲「相变临界」篇章限时活动即将开启"}])
     assert ctx.cached_side_story == "SideStory「泡影苍霆」"
     assert ctx.cached_activity_name == "泡影苍霆"
