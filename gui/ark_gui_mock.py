@@ -12,10 +12,10 @@ import sys
 import threading
 import traceback
 from pathlib import Path
-
+from data import load_config
 from core.character_script import run_character_pipeline
 from shared.services import ActivityRecord, list_activities_for_ui
-
+from PySide6.QtGui import QAction
 from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
 from PySide6.QtWidgets import (
     QApplication,
@@ -37,12 +37,12 @@ from PySide6.QtWidgets import (
     QWidget,
     QSpinBox,
     QFormLayout,
+    QMainWindow,
 )
 
 
 def _project_root() -> Path:
-    return Path(__file__).resolve().parent.parent
-
+    return Path(__file__).resolve().parents[1]
 
 def _parse_ark_gui_operator_sections(text: str) -> list[tuple[str, str]] | None:
     """解析「干员脚本2.0」返回的 <<<ARK_GUI_OP|名称>>> 分段；无法解析则返回 None。"""
@@ -136,6 +136,7 @@ class OperatorRunThread(QThread):
         wiki_flags: dict,
         wiki_bridge: WikiConfirmBridge | None,
         quiet: bool,
+        force_bilibili_fetch: bool,
         wiki_use_test_page: bool,
         character_num: int,
         dynamic_start_ts: int | None = None,
@@ -151,6 +152,7 @@ class OperatorRunThread(QThread):
         self._wiki_flags = wiki_flags
         self._wiki_bridge = wiki_bridge
         self._quiet = quiet
+        self._force_bilibili_fetch = force_bilibili_fetch
         self._wiki_use_test_page = wiki_use_test_page
         self._character_num = character_num
         self._dynamic_start_ts = dynamic_start_ts
@@ -181,6 +183,7 @@ class OperatorRunThread(QThread):
                 log_path=None,
                 no_log_file=False,
                 quiet=self._quiet,
+                force_bilibili_fetch=self._force_bilibili_fetch,
                 interactive=False,
                 wiki_use_test_page=self._wiki_use_test_page,
                 wiki_confirm=wiki_confirm,
@@ -196,11 +199,14 @@ class OperatorRunThread(QThread):
             self.failed.emit(f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
 
 
-class ArknightsToolWindow(QWidget):
+class ArknightsToolWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Arknights 数据工具（PySide6）")
         self.resize(960, 640)
+        central = QWidget()
+        self.setCentralWidget(central)
+
         self._run_thread: OperatorRunThread | None = None
         self._wiki_bridge = WikiConfirmBridge(self)
         self._activity_records: list[ActivityRecord] = []
@@ -253,18 +259,14 @@ class ArknightsToolWindow(QWidget):
         row_cfg.addWidget(btn_cfg)
 
         self.combo_source = QComboBox()
-        self.combo_source.addItems(
-            (
-                "Kengxxiao/ArknightsGameData",
-                "yuanyan3060/ArknightsGameResource",
-            )
-        )
-        self.combo_source.setCurrentIndex(0)
         self.combo_source.currentIndexChanged.connect(self._reload_activities)
+        self.combo_source.setCurrentIndex(0)
+        self._reload_data_sources()
 
         row_src = QHBoxLayout()
         row_src.addWidget(QLabel("数据源"))
         row_src.addWidget(self.combo_source, stretch=1)
+        
 
         log_mode_box = QGroupBox("日志 / 调试")
         log_mode_row = QHBoxLayout(log_mode_box)
@@ -277,21 +279,35 @@ class ArknightsToolWindow(QWidget):
         log_mode_row.addWidget(self.radio_log_normal)
         log_mode_row.addWidget(self.radio_log_debug)
         log_mode_row.addStretch(1)
+        force_bili_box = QGroupBox("补充数据")
+        force_bili_row = QHBoxLayout(force_bili_box)
+        self.chk_force_bilibili_fetch = QCheckBox("强制重抓 B 站动态(覆盖数据库数据)")
+        self.chk_force_bilibili_fetch.setChecked(False)
+        force_bili_row.addWidget(self.chk_force_bilibili_fetch)
+        force_bili_row.addStretch(1)
 
         wiki_box = QGroupBox("Wiki")
         wiki_grid = QGridLayout(wiki_box)
-
         self.chk_wiki_operator = QCheckBox("创建 / 更新干员页面")
         self.chk_wiki_operator.setChecked(True)
         self.chk_wiki_voice = QCheckBox("创建 / 更新语音页面")
         self.chk_wiki_voice.setChecked(True)
         self.chk_wiki_portrait = QCheckBox("上传半身像")
         self.chk_wiki_portrait.setChecked(False)
+        self.chk_wiki_ContractAndToken = QCheckBox("创建 / 更新新干员招聘合同和信物页面")
+        self.chk_wiki_ContractAndToken.setChecked(False)
+        self._wiki_action_checks = [
+            self.chk_wiki_operator,
+            self.chk_wiki_voice,
+            self.chk_wiki_portrait,
+            self.chk_wiki_ContractAndToken,
+        ]
 
-        wiki_grid.addWidget(self.chk_wiki_operator, 0, 0)
-        wiki_grid.addWidget(self.chk_wiki_voice, 0, 1)
-        wiki_grid.addWidget(self.chk_wiki_portrait, 1, 0)
-
+        wiki_grid.addWidget(self.chk_wiki_operator, 1, 0)
+        wiki_grid.addWidget(self.chk_wiki_voice, 1, 1)
+        wiki_grid.addWidget(self.chk_wiki_portrait, 2, 0)
+        wiki_grid.addWidget(self.chk_wiki_ContractAndToken, 2, 1)
+        
         btn_all = QPushButton("Wiki 全选")
         btn_all.clicked.connect(self._wiki_select_all)
         btn_none = QPushButton("Wiki 清空")
@@ -300,7 +316,7 @@ class ArknightsToolWindow(QWidget):
         row_wiki_btns.addWidget(btn_all)
         row_wiki_btns.addWidget(btn_none)
         row_wiki_btns.addStretch(1)
-        wiki_grid.addLayout(row_wiki_btns, 2, 0, 1, 2)
+        wiki_grid.addLayout(row_wiki_btns, 3, 0, 1, 2)
 
         self.btn_run = QPushButton("运行")
         self.btn_run.setMinimumHeight(36)
@@ -310,21 +326,56 @@ class ArknightsToolWindow(QWidget):
         self.result_tabs.setDocumentMode(True)
         self.result_tabs.setTabsClosable(False)
         self._placeholder_result = "运行摘要、每位干员的模板预览将显示在下方标签页…"
-
-        main = QVBoxLayout(self)
+        
+        row_result_btns = QHBoxLayout()
+        row_result_btns.addWidget(QLabel("结果（按干员分页）"), alignment=Qt.AlignmentFlag.AlignLeft)
+        row_result_btns.addStretch(1)
+        self.btn_result_output = QPushButton("导出")
+        row_result_btns.addWidget(self.btn_result_output)
+        self.btn_result_diff = QPushButton("对比wiki")
+        row_result_btns.addWidget(self.btn_result_diff)
+        
+        
+        main = QVBoxLayout(central)
         main.addLayout(row_left_check)
         main.addLayout(row_cfg)
         main.addLayout(row_src)
-        main.addWidget(log_mode_box)
+        row_log_and_force=QHBoxLayout()
+        row_log_and_force.addWidget(log_mode_box)
+        row_log_and_force.addWidget(force_bili_box)
+        main.addLayout(row_log_and_force)
         main.addWidget(wiki_box)
         main.addWidget(self.btn_run)
-        main.addWidget(QLabel("结果（按干员分页）"), alignment=Qt.AlignmentFlag.AlignLeft)
+        main.addLayout(row_result_btns)
         main.addWidget(self.result_tabs, stretch=1)
 
         self._clear_result_tabs()
         self._add_result_tab("提示", self._placeholder_result, editable=False)
         self._reload_activities()
-
+        self._build_menu()
+    def _build_menu(self) -> None:
+        setting_menu = self.menuBar().addMenu("文件")
+        setting_menu.addAction(QAction("设置", self, triggered=self._open_settings))
+    def _open_settings(self) -> None:
+        QMessageBox.information(self, "提示", "设置功能暂未实现")
+    def _reload_data_sources(self) -> None:
+        prev = self.combo_source.currentText().strip()
+        self.combo_source.blockSignals(True)
+        self.combo_source.clear()
+        cfg_path = self.edit_config.text().strip()
+        keys: list[str] = []
+        if cfg_path and os.path.isfile(cfg_path):
+            try:
+                cfg = load_config(cfg_path)
+                keys = list((cfg.get("data_sources") or {}).keys())
+            except Exception as e:
+                self.combo_source.addItem(f"（加载失败: {e}）")
+        if keys:
+            self.combo_source.addItems(keys)
+            idx = self.combo_source.findText(prev)
+            self.combo_source.setCurrentIndex(idx if idx >= 0 else 0)
+        self.combo_source.blockSignals(False)
+        self._reload_activities()
     def _reload_activities(self) -> None:
         """启用库：数据源同步进 activities 后只读库；未启用库则直接读 JSON。"""
         prev = self._selected_activity()
@@ -414,29 +465,32 @@ class ArknightsToolWindow(QWidget):
         )
         if path:
             self.edit_config.setText(path)
-            self._reload_activities()
+            self._reload_data_sources()
 
     def _wiki_select_all(self) -> None:
         self.chk_wiki_operator.setChecked(True)
         self.chk_wiki_voice.setChecked(True)
         self.chk_wiki_portrait.setChecked(True)
+        self.chk_wiki_ContractAndToken.setChecked(True)
 
     def _wiki_select_none(self) -> None:
         self.chk_wiki_operator.setChecked(False)
         self.chk_wiki_voice.setChecked(False)
         self.chk_wiki_portrait.setChecked(False)
-
+        self.chk_wiki_ContractAndToken.setChecked(False)
+    def _sync_wiki_publish_ui(self,enabled:bool) -> None:
+        for w in self._wiki_action_checks:
+            w.setEnabled(enabled)
+    def log_quiet(self) -> bool:
+        """True=普通/安静；False=调试（与 run_character_pipeline(quiet=...) 一致）。"""
+        return not self.radio_log_debug.isChecked()
     def wiki_flags(self) -> dict[str, bool]:
         return {
             "wiki_operator_page": self.chk_wiki_operator.isChecked(),
             "wiki_voice_page": self.chk_wiki_voice.isChecked(),
             "wiki_portrait": self.chk_wiki_portrait.isChecked(),
+            "wiki_ContractAndToken": self.chk_wiki_ContractAndToken.isChecked(),
         }
-
-    def log_quiet(self) -> bool:
-        """True=普通/安静；False=调试（与 run_character_pipeline(quiet=...) 一致）。"""
-        return not self.radio_log_debug.isChecked()
-
     def _on_run(self) -> None:
         cfg = self.edit_config.text().strip()
         if not cfg or not os.path.isfile(cfg):
@@ -451,6 +505,7 @@ class ArknightsToolWindow(QWidget):
         summon_charid = self.edit_summon_charid.text().strip() or None
         flags = self.wiki_flags()
         quiet = self.log_quiet()
+        force_bilibili_fetch = self.chk_force_bilibili_fetch.isChecked()
         wiki_sandbox = self.chk_wiki_test_page.isChecked()
         activity = self._selected_activity()
         by_activity = activity is not None
@@ -489,8 +544,9 @@ class ArknightsToolWindow(QWidget):
             f"指定干员: {operator_filter or ('未指定（活动期内全部）' if by_activity else '未指定（按数量批量）')}\n"
             f"附属模板(charId): {summon_charid or '未指定'}\n"
             f"日志模式: {'普通(quiet=True)' if quiet else '调试(quiet=False)'}\n"
+            f"强制重抓 B 站动态: {force_bilibili_fetch}\n"
             f"Wiki(非交互): 干员页={flags['wiki_operator_page']} "
-            f"语音页={flags['wiki_voice_page']} 半身像={flags['wiki_portrait']}\n"
+            f"语音页={flags['wiki_voice_page']} 半身像={flags['wiki_portrait']} 招聘合同和信物页={flags['wiki_ContractAndToken']}\n"
             f"Wiki 写入目标: {'沙盒测试页' if wiki_sandbox else '正式词条标题'}\n"
             f"选择干员数量: {'（已选活动，此项无效）' if by_activity else f'{character_num} 个'}\n"
             "写入 Wiki 前将弹出二次确认（主线程对话框）。\n\n"
@@ -507,6 +563,7 @@ class ArknightsToolWindow(QWidget):
             wiki_flags=flags,
             wiki_bridge=self._wiki_bridge,
             quiet=quiet,
+            force_bilibili_fetch=force_bilibili_fetch,
             wiki_use_test_page=wiki_sandbox,
             character_num=character_num,
             dynamic_start_ts=dynamic_start_ts,

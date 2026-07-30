@@ -5,7 +5,12 @@ from __future__ import annotations
 from data.mapper_helpers import bind_operator, bind_skill_index, bind_skill_table_id
 from shared.rendering.description_parser import process_description
 
-
+from shared.globals.wiki_constants import MAPPING_SKILL_TYPE
+from core.character_script.mapper_ops import current_character_row
+from shared.rendering.summon import (
+    collect_operator_token_keys,
+    resolve_token_display_name,
+)
 def render_operator_skill_fields(
     mapper,
     trait_candidates,
@@ -24,6 +29,15 @@ def render_operator_skill_fields(
     """
     lines: list[str] = []
     summon_entries: list[tuple[int, str, str]] = []
+    owner_row = current_character_row(mapper) or {}
+    all_tokens = collect_operator_token_keys(owner_row)
+    skill_bound: set[str] = set()
+    has_ammo_skill = False
+    for skill in owner_row.get("skills") or []:
+        k = ((skill or {}).get("overrideTokenKey") or "").strip()
+        if k:
+            skill_bound.add(k)
+    orphan_tokens = [k for k in all_tokens if k not in skill_bound]
     for i in range(1, 4):
         bind_skill_index(mapper, i)
         skill_id = mapper.get_data_safe("character_table", "skill_id", default="") or ""
@@ -40,11 +54,17 @@ def render_operator_skill_fields(
         skill_recover_type = sp_data.get("spType")
         skill_trigger_type = head.get("skillType")
         override_token_key = mapper.get_data_safe("character_table", "skill_override_token_key")
-
+        skill_type = head.get("durationType")  # 弹药类
+        skill_icon = head.get("icon")
         lines.append(f"|技能{i}={skill_name if skill_name is not None else ''}")
+        lines.append(f"|skillId{i}={skill_id if skill_id is not None else ''}")
+        lines.append(f"|skillIcon{i}={skill_icon if skill_icon is not None else ''}")
+        lines.append(f"|技能{i}类型={MAPPING_SKILL_TYPE.get(skill_type, '')}")
+        if MAPPING_SKILL_TYPE.get(skill_type, '') == "弹药":
+            has_ammo_skill = True
         lines.append(f"|技能{i}攻击范围={skill_range if skill_range is not None else ''}")
         lines.append(f"|技能{i}回复类型={mapper._apply_value_map('skill_table', 'sp_type', skill_recover_type) or ''}")
-        lines.append(f"|技能{i}触发类型={mapper._apply_value_map('skill_table', 'skill_trigger_type', skill_trigger_type) or ''}")
+        lines.append(f"|技能{i}触发类型={mapper._apply_value_map('skill_table', 'skill_trigger_type', skill_trigger_type) or ''}")     
         for j in range(1, 11):
             level_data = skill_data[j - 1] if skill_data and len(skill_data) > j - 1 else {}
             sp_data = level_data.get("spData", {})
@@ -65,21 +85,20 @@ def render_operator_skill_fields(
             lines.append(f"|技能{i}初始技力{j}={skill_init if skill_init is not None else ''}")
             lines.append(f"|技能{i}持续时间{j}={skill_consistent_time if skill_consistent_time is not None and skill_consistent_time >= 0 else ''}")
         lines.append(f"|技能{i}备注=")
-        summon_name = ""
-        if override_token_key:
-            bind_operator(mapper, override_token_key)
-            summon_name = mapper.get_data_safe("character_table", "operator_name") or ""
-        summon_comment = (
-            "<!-- 请额外创建页面，使用干员附带单位模板 -->"
-            if i == 1
-            else "<!-- 只有一个召唤物就不用填 -->"
-        )
+        override_token_key = (
+            mapper.get_data_safe("character_table", "skill_override_token_key") or ""
+        ).strip()
+        summon_key = override_token_key
+        if not summon_key and orphan_tokens:
+            summon_key = orphan_tokens.pop(0)
+        summon_name = resolve_token_display_name(mapper, summon_key) if summon_key else ""
         if summon_name:
             lines.append(f"|召唤物{i}={summon_name}")
         else:
-            lines.append(f"|召唤物{i}={summon_comment}")
-        summon_entries.append((i, override_token_key, summon_name))
-    return lines, summon_entries
+            lines.append(f"|召唤物{i}=")
+        summon_entries.append((i, summon_key, summon_name))
+
+    return lines, summon_entries, has_ammo_skill
 
 
 __all__ = ["render_operator_skill_fields"]

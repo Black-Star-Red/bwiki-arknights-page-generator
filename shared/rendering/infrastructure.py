@@ -69,8 +69,9 @@ def render_operator_infrastructure_fields(
             # Wiki 模板：id1–id6 = 技能槽1 三档(1–3) + 技能槽2 三档(4–6)
             infra_flat_index = (i - 1) * 3 + j
             lines.append(f"|基建技能{i}{INFRASTRUCTURE_SKILL_SUFFIX[j]}={infrastructure_skill_name if infrastructure_skill_name is not None else ''}")
-            lines.append(f"|基建技能id{infra_flat_index}={infrastructure_skill_id if infrastructure_skill_id is not None else ''}")
-            lines.append(f"|基建技能图标{infra_flat_index}={infrastructure_skill_icon if infrastructure_skill_icon is not None else ''}")
+            if infra_flat_index<=5:
+                lines.append(f"|基建技能id{infra_flat_index}={infrastructure_skill_id if infrastructure_skill_id is not None else ''}")
+                lines.append(f"|基建技能图标{infra_flat_index}={infrastructure_skill_icon if infrastructure_skill_icon is not None else ''}")
             lines.append(
                 f"|基建技能{i}{INFRASTRUCTURE_SKILL_SUFFIX[j][:-1]}{'条件' if j > 1 else '解锁'}={infrastructure_skill_condition if infrastructure_skill_condition is not None and infrastructure_skill_name is not None else ''}"
             )
@@ -82,10 +83,10 @@ def render_operator_infrastructure_fields(
                 None,
                 term_index_cache,
             )
-            lines.append(f"|基建技能{i}{INFRASTRUCTURE_SKILL_SUFFIX[j]}效果={infra_desc}")
             lines.append(
                 f"|基建技能{i}{INFRASTRUCTURE_SKILL_SUFFIX[j]}设施={INFRASTRUCTURE_ROOM[infrastructure_skill_room] if infrastructure_skill_room is not None else ''}"
             )
+            lines.append(f"|基建技能{i}{INFRASTRUCTURE_SKILL_SUFFIX[j]}效果={infra_desc}")
     return lines
 
 

@@ -67,12 +67,24 @@ def build_operator_parts_without_local_json(
     mapper,
     *,
     char_id: str | None = None,
+    alter_operator: str | None = None,
+    alter_base_name: str = "",
 ) -> list[str]:
     """生成干员 Wiki 模板：B 站 supplementary 有值，游戏 JSON 字段为空。"""
     obtain = wiki_obtain_path(value)
-    label = build_corner_labels(value)
+    alter = (alter_operator or "").strip()
+    label = build_corner_labels(value, alter_operator=alter)
 
     parts: list[str] = []
+    if alter:
+        base_nm = (alter_base_name or "").strip()
+        parts.append(
+            "{{多义词|同义名="
+            + f"{base_nm}"
+            + "|说明=是"
+            + f"{base_nm}"
+            + "的异格干员}}"
+        )
     parts.append("{{干员")
     parts.append(f"|干员代号={name}")
     parts.append("|背景=")
@@ -82,6 +94,8 @@ def build_operator_parts_without_local_json(
         parts.append("|角标=" + "、".join(label))
     if is_limited_dynamic(value):
         parts.append("|解限=否")
+    if alter:
+        parts.append(f"|异格干员={alter}")
     parts.append(f"|获取途径={obtain}")
     parts.append("|英文名=")
     parts.append("|职业=")

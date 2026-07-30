@@ -12,12 +12,14 @@
     }
   },
   "data_source_roots": {
-    "Kengxxiao/ArknightsGameData": "../ArknightsData/ArknightsGameData",
-    "yuanyan3060/ArknightsGameResource": "../ArknightsData/ArknightsGameResource"
+    "Kengxxiao/ArknightsGameData": "../ArknightsData/Kengxxiao.ArknightsGameData",
+    "yuanyan3060/ArknightsGameResource": "../ArknightsData/yuanyan3060.ArknightsGameResource",
+    "ArknightsAssets/ArknightsGamedata": "../ArknightsData/ArknightsAssets.ArknightsGamedata"
   },
   "$include": [
     "data_sources/Kengxxiao.ArknightsGameData.json",
-    "data_sources/yuanyan3060.ArknightsGameResource.json"
+    "data_sources/yuanyan3060.ArknightsGameResource.json",
+    "data_sources/ArknightsAssets.ArknightsGamedata.json"
   ],
   "database": {
     "enabled": false,
@@ -33,5 +35,11 @@
       "table": "activities",
       "sync_from_data_source": true
     }
+  },
+  "hypergryph": {
+    "bulletin_list_url": "https://ak-webview.hypergryph.com/api/game/bulletinList",
+    "bulletin_detail_url": "https://ak-webview.hypergryph.com/api/game/bulletin/{cid}",
+    "dynamic_compile_url": "https://ak.hypergryph.com/archive/dynamicCompile",
+    "bulletin_target": "Android"
   }
 }

@@ -12,6 +12,7 @@ env/
 dist/
 build/
 *.egg
+.docs
 
 # 本地/密钥
 arknights_toolbox/config/config.local.json

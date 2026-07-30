@@ -20,8 +20,6 @@ from shared.globals import (
     DEFAULT_BILIBILI_MID,
     INFRASTRUCTURE_CONDITION,
     MAPPING_SKILL_TYPE as mapping_skill_type,
-    POSITION as position,
-    PROFESSION as profession,
     SKILL_TRIGGER_TYPE as skill_trigger_type,
     SKILL_TYPE as skill_type,
     VOICE_MAP,
@@ -60,7 +58,7 @@ from data.db.engine import resolve_database_settings
 from .mapper_ops import (
     _char_id_in_table,
     collect_cid_name_pairs,
-    resolve_alter_operator_char_id,
+    resolve_alter_for_operator,
     resolve_operator_char_id_for_name,
     set_current_char_id,
     sub_profession_name,
@@ -97,6 +95,7 @@ def generate_template(
     dynamic_end_ts: int | None = None,
     activity_name: str | None = None,
     activity_is_main_theme: bool = False,
+    force_bilibili_fetch: bool = False,
 ):
     """
     生成干员模板
@@ -127,6 +126,7 @@ def generate_template(
         dynamic_end_ts=dynamic_end_ts,
         activity_name=activity_name,
         activity_is_main_theme=activity_is_main_theme,
+        force_bilibili_fetch=force_bilibili_fetch,
     )
     if selected and not supplementary_data:
         return ""
@@ -174,11 +174,28 @@ def generate_template(
         found_cid = resolve_operator_char_id_for_name(
             mapper, name, stored_char_id=stored_cid
         )
+        alter_operator, alter_base_name = resolve_alter_for_operator(
+            mapper, name, found_cid
+        )
         parts: list[str] = []
+        has_ammo_skill = False
         try:
             if found_cid is None:
                 log_warning("未在 character_table 中找到干员：%s，游戏内字段留空", name)
-                parts = build_operator_parts_without_local_json(name, value, mapper)
+                if alter_operator:
+                    log_info(
+                        "干员 %s 异格本体兜底（未进表）: %s (%s)",
+                        name,
+                        alter_operator,
+                        alter_base_name,
+                    )
+                parts = build_operator_parts_without_local_json(
+                    name,
+                    value,
+                    mapper,
+                    alter_operator=alter_operator,
+                    alter_base_name=alter_base_name,
+                )
                 Id = ""
             elif not _char_id_in_table(mapper, found_cid):
                 log_info(
@@ -187,7 +204,12 @@ def generate_template(
                     found_cid,
                 )
                 parts = build_operator_parts_without_local_json(
-                    name, value, mapper, char_id=found_cid
+                    name,
+                    value,
+                    mapper,
+                    char_id=found_cid,
+                    alter_operator=alter_operator,
+                    alter_base_name=alter_base_name,
                 )
                 for idx, line in enumerate(parts):
                     if line.startswith("|charId="):
@@ -195,33 +217,32 @@ def generate_template(
                         break
                 Id = found_cid
             else:
-                set_current_char_id(mapper, found_cid)
+                set_current_char_id(mapper,"character_table","currentCharId", found_cid)
                 Id = found_cid
-                alter_operator = None
                 parts.append("{{干员")
                 parts.append(f"|干员代号={name}")
                 parts.append("|背景=")
                 parts.append(f"|实装日期={value.get('实装日期', '')}")
                 parts.append(f"|charId={Id}")
-                alter_operator, char_name = resolve_alter_operator_char_id(mapper, Id)
-                if alter_operator:
-                    alter_operator = str(alter_operator)
-                    char_name = char_name or ""
-                else:
-                    alter_operator = None
-                    char_name = ""
-                set_current_char_id(mapper, Id)
+                set_current_char_id(mapper,"character_table","currentCharId", Id)
                 obtain = wiki_obtain_path(value)
-                label = build_corner_labels(value, alter_operator=alter_operator)
+                label = build_corner_labels(value, alter_operator=alter_operator or "")
                 if label:
                     parts.append("|角标=" + "、".join(label))
                 if is_limited_dynamic(value):
                     parts.append("|解限=否")
                 if alter_operator:
                     parts.append(f"|异格干员={alter_operator}")
-                    parts.insert(0, "{{多义词|同义名=" + f"{char_name}" + "|说明=是" + f"{char_name}" + "的异格干员}}")
+                    parts.insert(
+                        0,
+                        "{{多义词|同义名="
+                        + f"{alter_base_name}"
+                        + "|说明=是"
+                        + f"{alter_base_name}"
+                        + "的异格干员}}",
+                    )
                 parts.append(f"|英文名={mapper.get_data_safe('character_table', 'appellation') or ''}")
-                parts.append(f"|职业={profession.get(mapper.get_data_safe('character_table', 'profession'))}")
+                parts.append(f"|职业={mapper.get_data_safe('character_table', 'profession')}")
                 star = mapper.get_data_safe("character_table", "rarity")
                 parts.append(f"|星级={star}")
                 parts.append(f"|干员编号={mapper.get_data_safe('character_table', 'displayNumber')}<!-- 类似B101格式的编号 -->")
@@ -243,7 +264,7 @@ def generate_template(
                                 item.append(j)
                 parts.append(f"|副阵营={'、'.join(_team_power_names(mapper, item))}")
                 label = []
-                pos_label = position.get(mapper.get_data_safe("character_table", "position"))
+                pos_label = mapper.get_data_safe("character_table", "position")
                 if pos_label:
                     label.append(pos_label)
                 tag_list = mapper.get_data_safe("character_table", "tagList")
@@ -287,13 +308,13 @@ def generate_template(
                                 f"|{i}技能{j}→{j+1}材料={render_skill_materials(mapper, level_up_cost[i - 1], j - 6)}"
                             )
                 parts.extend(
-                render_operator_talent_fields(
-                    mapper,
-                    trait_candidates,
-                    rich_styles,
-                    term_description_dict,
-                    term_index_cache,
-                )
+                    render_operator_talent_fields(
+                        mapper,
+                        trait_candidates,
+                        rich_styles,
+                        term_description_dict,
+                        term_index_cache,
+                    )
                 )
                 parts.extend(render_operator_potential_fields(mapper))
 
@@ -303,13 +324,13 @@ def generate_template(
                 )
 
                 parts.extend(render_operator_trust_fields(mapper))
-                skill_lines, summon_entries = render_operator_skill_fields(
-                mapper,
-                trait_candidates,
-                rich_styles,
-                term_description_dict,
-                mapping_skill_type,
-                term_index_cache,
+                skill_lines, summon_entries, has_ammo_skill = render_operator_skill_fields(
+                    mapper,
+                    trait_candidates,
+                    rich_styles,
+                    term_description_dict,
+                    mapping_skill_type,
+                    term_index_cache,
                 )
                 parts.extend(skill_lines)
                 summon_array = set()
@@ -327,7 +348,6 @@ def generate_template(
                         trait_candidates,
                         rich_styles,
                         term_description_dict,
-                        position,
                         mapping_skill_type,
                         skill_type,
                         skill_trigger_type,
@@ -351,6 +371,15 @@ def generate_template(
                         else:
                             print("Wiki未连接，跳过创建召唤物页面")
                     summon_array.add(summon_name)
+                    gui_operator_outputs.append(
+                        (
+                            summon_name.replace("|", "｜"),
+                            "【干员附带单位】\n"
+                            + ("-" * 56)
+                            + "\n"
+                            + "\n".join(summon_lines)
+                        )
+                    )
                 parts.extend(
                 render_operator_infrastructure_fields(
                     mapper,
@@ -384,6 +413,8 @@ def generate_template(
 
                 parts.extend(render_operator_cv_fields(mapper, Id))
                 parts.append("}}")
+                if has_ammo_skill:
+                    parts.append("[[category:拥有弹药类技能的干员]]")
             main_wikitext = "\n".join(parts)
 
             publish_wiki_page_if_enabled(
@@ -409,19 +440,6 @@ def generate_template(
                 parts.extend(_empty_voice_template_lines(name))
             voice_wikitext = "\n".join(parts)
             safe_tab_name = name.replace("|", "｜")
-            gui_operator_outputs.append(
-                (
-                    safe_tab_name,
-                    "【干员页模板】\n"
-                    + ("-" * 56)
-                    + "\n"
-                    + main_wikitext
-                    + "\n\n【干员语音/套】\n"
-                    + ("-" * 56)
-                    + "\n"
-                    + voice_wikitext,
-                )
-            )
             publish_wiki_page_if_enabled(
                 enabled=wiki_yes_no(
                     f"干员{name}语音页面确定创建(Y/N):",
@@ -455,6 +473,87 @@ def generate_template(
                 operator_id=Id,
                 operator_name=name,
                 headers=build_hycdn_portrait_headers(),
+            )
+            parts.clear()
+            parts.append("{{材料图鉴")
+            parts.append(f"|材料名称={name}招聘合同")
+            parts.append(f"|材料介绍={mapper.get_data_safe('character_table', 'itemUsage')}")
+            parts.append(f"|材料备注={mapper.get_data_safe('character_table', 'itemDesc')}")
+            parts.append(f"|itemid={Id}")
+            parts.append("|材料类型=干员信物")
+            parts.append(f"|获得方式={mapper.get_data_safe('character_table', 'itemObtainApproach')}")
+            parts.append("|固定掉落=")
+            parts.append("|大概率=")
+            parts.append("|概率掉落=")
+            parts.append("|小概率=")
+            parts.append("|罕见=")
+            parts.append("|额外物资=")
+            parts.append("|基建生产=")
+            parts.append(f"|稀有度={mapper.get_data_safe("character_table", "rarity")}")
+            parts.append("|备注=")
+            ContractAndToken_enabled = wiki_yes_no(
+                    f"干员{name}招聘合同和信物页面确定创建(Y/N):",
+                    wiki_key="wiki_ContractAndToken",
+                    wiki_flags=wiki_flags,
+                    interactive=interactive,
+                    wiki_confirm=wiki_confirm,
+                )
+            publish_wiki_page_if_enabled(
+                enabled=ContractAndToken_enabled,
+                get_site_fn=get_site,
+                create_site_page_fn=create_site_page,
+                page_name=f"{name}的招聘合同",
+                page_content="\n".join(parts),
+                wiki_use_test_page=wiki_use_test_page,
+                offline_message="Wiki未连接，跳过创建招聘合同页面",
+            )
+            Contract_wikitext = "\n".join(parts)
+            parts.clear()
+            potentialItemId = mapper.get_data_safe("character_table", "potentialItemId")
+            if potentialItemId:
+                set_current_char_id(mapper,"item_table","item_id", potentialItemId)
+                parts.append("{{材料图鉴")
+                parts.append(f"|材料名称={mapper.get_data_safe('item_table', 'item_name')}")
+                parts.append(f"|材料介绍={mapper.get_data_safe('item_table', 'item_usage')}")
+                parts.append(f"|材料备注={mapper.get_data_safe('item_table', 'item_description')}")
+                parts.append(f"|itemid={potentialItemId}")
+                parts.append(f"|img=")
+                parts.append(f"|材料类型=干员信物")
+                parts.append(f"|获得方式={mapper.get_data_safe('item_table', 'item_obtain_approach')}")
+                parts.append(f"|稀有度={mapper.get_data_safe("item_table", "item_rarity")}")
+                parts.append(f"|仓库分类={mapper.get_data_safe('item_table', 'classify_type')}")
+                parts.append("|备注=")
+                parts.append("}}")
+            publish_wiki_page_if_enabled(
+                enabled=ContractAndToken_enabled,
+                get_site_fn=get_site,
+                create_site_page_fn=create_site_page,
+                page_name=f"{name}的信物",
+                page_content="\n".join(parts),
+                wiki_use_test_page=wiki_use_test_page,
+                offline_message="Wiki未连接，跳过创建信物页面",
+            )
+            Token_wikitext = "\n".join(parts)
+            gui_operator_outputs.append(
+                (
+                    safe_tab_name,
+                    "【干员页模板】\n"
+                    + ("-" * 56)
+                    + "\n"
+                    + main_wikitext
+                    + "\n\n【干员语音/套】\n"
+                    + ("-" * 56)
+                    + "\n"
+                    + voice_wikitext
+                    + "\n\n【招聘合同】\n"
+                    + ("-" * 56)
+                    + "\n"
+                    + Contract_wikitext
+                    + "\n\n【干员信物】\n"
+                    + ("-" * 56)
+                    + "\n"
+                    + Token_wikitext
+                )
             )
         except Exception:
             traceback.print_exc()

@@ -6,8 +6,8 @@ from data.mapper_helpers import bind_charword
 
 # 与 B 站方舟 Wiki 常见一星干员页一致：中文 CV 在前，日配次之
 _CV_FIELD_SPECS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("CV中", ("CN_MANDARIN", "CHINESE", "CHINESE_MAINLAND")),
     ("CV", ("JP",)),
+    ("CV中", ("CN_MANDARIN", "CHINESE", "CHINESE_MAINLAND")),
     ("CV英", ("ENGLISH", "EN_US", "EN_GB")),
     ("CV韩", ("KOREAN", "KR")),
     ("CV方", ("CUSTOM", "CN_TOPOLECT", "LINKAGE", "REGIONAL")),

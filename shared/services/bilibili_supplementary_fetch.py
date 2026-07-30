@@ -47,6 +47,8 @@ from .bilibili_service import (
     resolve_collab_activity_name,
     should_use_main_theme_reward_obtain,
     _main_theme_reward_obtain_path,
+    _normalize_reward_gacha_pool,
+    resolve_bulletin_activity_date_label,
 )
 
 
@@ -96,9 +98,17 @@ def _remember_discovered_announce(
 def _load_pool_view(
     mid: str,
     headers: dict[str, str],
-) -> tuple[dict[str, list[str]], dict[str, set[str]]]:
+) -> tuple[dict[str, list[str]], dict[str, set[str]], dict[str, str]]:
+    """拉取官号限定寻访专栏。
+
+    返回 (pool_view, pool_limited_ops, pool_article_text)：
+    - pool_view[卡池名] = [寻访类型, 开日文案]
+    - pool_limited_ops[卡池名] = 摘要中带 [限定] 的干员
+    - pool_article_text[卡池名] = 标题+摘要，供「新增干员」按干员名反查卡池
+    """
     pool_view: dict[str, list[str]] = {}
     pool_limited_ops: dict[str, set[str]] = {}
+    pool_article_text: dict[str, str] = {}
     url = "https://api.bilibili.com/x/space/article"
     params = {"mid": mid, "ps": 12}
     request = None
@@ -112,7 +122,7 @@ def _load_pool_view(
             pass
         time.sleep((2**attempt) * 0.4 + random.random() * 0.2)
     if request is None:
-        return pool_view, pool_limited_ops
+        return pool_view, pool_limited_ops, pool_article_text
     try:
         articles = request.json().get("data", {}).get("articles", [])
     except ValueError:
@@ -148,7 +158,28 @@ def _load_pool_view(
         pool_limited_ops[pool_key] = _extract_limited_operators_from_article_summary(
             summary
         )
-    return pool_view, pool_limited_ops
+        pool_article_text[pool_key] = f"{title}\n{summary}"
+    return pool_view, pool_limited_ops, pool_article_text
+
+
+def _resolve_article_pool_key_for_operator(
+    name: str,
+    *,
+    pool_limited_ops: dict[str, set[str]],
+    pool_article_text: dict[str, str],
+) -> str | None:
+    """预告为「新增干员」等占位名时，用干员名反查限定寻访专栏卡池名。"""
+    name = (name or "").strip()
+    if len(name) < 2:
+        return None
+    for pool_key, limited in pool_limited_ops.items():
+        if _is_limited_operator_in_pool(name, limited):
+            return pool_key
+    # 专栏列表新→旧；多名命中时取最先出现的（最新专栏）
+    for pool_key, text in pool_article_text.items():
+        if name in (text or ""):
+            return pool_key
+    return None
 
 
 def _build_character_from_hit(
@@ -156,6 +187,7 @@ def _build_character_from_hit(
     *,
     pool_view: dict[str, list[str]],
     pool_limited_ops: dict[str, set[str]],
+    pool_article_text: dict[str, str],
     acquisition_method: dict[str, str],
     run_ocr: bool,
     log_warning: Callable[[str, Any], None],
@@ -167,7 +199,7 @@ def _build_character_from_hit(
     name = hit.name
     text = hit.text
     item = hit.item
-    gacha_pool = hit.gacha_pool
+    gacha_pool, pooled_theme = _normalize_reward_gacha_pool(hit.gacha_pool)
     photo_path = operator_photo_dir() / f"{name}.jpg"
 
     if run_ocr:
@@ -190,11 +222,6 @@ def _build_character_from_hit(
     op_ts = _dynamic_pub_ts(item)
     pools = collab_gacha_pools_at_or_before(scan_ctx, op_ts)
     is_collab_dynamic = hit.is_collab
-    named_collab_pool = bool(
-        is_collab_dynamic
-        and gacha_pool
-        and gacha_pool not in ("新增干员", "活动奖励干员", "主题曲奖励干员")
-    )
     collab_standard_pool = bool(
         is_collab_dynamic
         and gacha_pool in ("新增干员", "活动奖励干员", "主题曲奖励干员")
@@ -223,19 +250,32 @@ def _build_character_from_hit(
     )
     release_time = None
     implementation_data = pool_view.get(gacha_pool)
-    named_pool_from_announce = (
-    not is_collab_dynamic
-    and is_named_gacha_pool(gacha_pool)
-)
-    if named_pool_from_announce:
-        branch_name = "分支：named_pool_from_announce"
-        character["联动"] = True
-        character["联动卡池"] = gacha_pool
-        character["获取途径"] = _obtain_path_for_gacha_pool(
-            gacha_pool, acquisition_method, collab=True
+    # 预告【新增干员】时按干员名反查限定寻访专栏（如嘉辛塔 → 车辙与风的归所）
+    article_pool_key: str | None = None
+    if gacha_pool == "新增干员" and (
+        pool_view.get(gacha_pool) is None and pool_limited_ops.get(gacha_pool) is None
+    ):
+        article_pool_key = _resolve_article_pool_key_for_operator(
+            name,
+            pool_limited_ops=pool_limited_ops,
+            pool_article_text=pool_article_text,
         )
-    elif named_collab_pool:
-        branch_name = "分支：named_collab_pool"
+        if article_pool_key:
+            log_info(
+                "pool_article_resolve name=%s announce_pool=%s article_pool=%s",
+                name,
+                gacha_pool,
+                article_pool_key,
+            )
+    collab_named_pool = bool(
+        is_named_gacha_pool(gacha_pool)
+        and (
+            is_collab_dynamic                    # 本条动态有 【明日方舟 × …】
+            or gacha_pool in pools               # 或池名在联动时间表里
+        )
+    )
+    if collab_named_pool:
+        branch_name = "分支：collab_named_pool"
         character["联动"] = True
         character["联动卡池"] = gacha_pool
         character["获取途径"] = _obtain_path_for_gacha_pool(
@@ -335,14 +375,29 @@ def _build_character_from_hit(
     elif (
         pool_view.get(gacha_pool) is not None
         or pool_limited_ops.get(gacha_pool)
+        or (
+            article_pool_key
+            and (
+                pool_view.get(article_pool_key) is not None
+                or pool_limited_ops.get(article_pool_key)
+            )
+        )
     ):
         branch_name = "分支：pool_obtain_fallback"
-        implementation_data = pool_view.get(gacha_pool) or ["", ""]
+        pool_key = (
+            gacha_pool
+            if (
+                pool_view.get(gacha_pool) is not None
+                or pool_limited_ops.get(gacha_pool)
+            )
+            else article_pool_key
+        ) or gacha_pool
+        implementation_data = pool_view.get(pool_key) or ["", ""]
         if implementation_data[1] and implementation_data[1][0] == "0":
             implementation_data = [implementation_data[0], implementation_data[1][1:]]
         release_time = implementation_data[1] or None
         prefix = acquisition_method.get(implementation_data[0] or "")
-        limited_in_pool = pool_limited_ops.get(gacha_pool, set())
+        limited_in_pool = pool_limited_ops.get(pool_key, set())
         is_limited = bool(
             limited_in_pool
             and prefix is not None
@@ -351,30 +406,41 @@ def _build_character_from_hit(
         log_info(
             "pool_obtain name=%s pool=%s banner=%s limited_tags=%s is_limited=%s",
             name,
-            gacha_pool,
+            pool_key,
             implementation_data[0],
             sorted(limited_in_pool) or None,
             is_limited,
         )
         if is_limited:
-            character["获取途径"] = prefix + f"{gacha_pool}】限定寻访"
+            character["获取途径"] = prefix + f"{pool_key}】限定寻访"
             dynamic_id = get_dynamic_id(name)
             if dynamic_id:
                 character["动态id"] = dynamic_id
         else:
             character["获取途径"] = acquisition_method.get("新增干员", "标准寻访")
-    else:
+    elif (
+    collab_period_activity_reward
+    or (gacha_pool and ("集成战略" in gacha_pool and "奖励干员" in gacha_pool))
+    ):
         branch_name = "分支：pool_obtain_fallback_no_article_match"
         log_info(
             "pool_obtain_fallback name=%s pool=%s (no article match)",
             name,
             gacha_pool,
         )
+        reward_activity = (
+            resolve_activity_reward_name(side_story=hit.side_story, scan_ctx=scan_ctx)
+            or pooled_theme
+        )
         character["获取途径"] = _obtain_path_for_gacha_pool(
             gacha_pool,
             acquisition_method,
             side_story=hit.side_story,
+            activity_name=pooled_theme,
         )
+    elif gacha_pool == "新增干员":
+        branch_name = "分支：plain_new_operator"
+        character["获取途径"] = acquisition_method.get(gacha_pool, "标准寻访")
     log_info(
         "bilibili_build_character name=%s gacha_pool=%s is_collab=%s branch=%s pools=%s",
         name, gacha_pool, is_collab_dynamic, branch_name, sorted(pools),
@@ -390,21 +456,29 @@ def _build_character_from_hit(
         if act_ts is not None:
             date_label = zh_ymd_from_unix_ts(act_ts)
         else:
-            pub_ts = _dynamic_pub_ts(item)
-            if pub_ts is not None:
-                date_label = zh_ymd_from_unix_ts(pub_ts)
+            activity_hint = None
+            if gacha_pool in ("活动奖励干员", "主题曲奖励干员"):
+                activity_hint = resolve_activity_reward_name(
+                    side_story=hit.side_story, scan_ctx=scan_ctx
+                )
+            bulletin_label = resolve_bulletin_activity_date_label(
+                scan_ctx, activity_name=activity_hint
+            )
+            if bulletin_label:
+                date_label = bulletin_label
             else:
-                now = datetime.now(tz=CN_TZ)
-                date_label = format_zh_ymd(now.year, now.month, now.day)
+                pub_ts = _dynamic_pub_ts(item)
+                if pub_ts is not None:
+                    date_label = zh_ymd_from_unix_ts(pub_ts)
+                else:
+                    now = datetime.now(tz=CN_TZ)
+                    date_label = format_zh_ymd(now.year, now.month, now.day)
     character["实装日期"] = (
         f"[https://t.bilibili.com/{item['id_str']}?spm_id_from=333.1387.0.0 {date_label}]"
     )
     intro = text[text.rfind("_") + 2 :].rstrip("\n")
     intro = intro.replace("\n", "<br/>\n")
-    character["宣传介绍"] = intro.replace(
-        "<br/>\n<br/>\n关注并转发本条动态，我们将抽取10位博士赠送【现金648元】一份。",
-        "",
-    )
+    character["宣传介绍"] = intro[:intro.find("<br/>\n关注并转发本条动态")]
     return character
 
 
@@ -561,9 +635,17 @@ def _scan_announces(
             sid = scan_ctx.discovered_dynamic_ids.get((t or "").strip())
             if sid:
                 wanted_dynamic_ids.add(sid)
-        # 有发现阶段动态 id 时不再用页数封顶，避免扫不到第三条联动预告
-        if not wanted_dynamic_ids and scan_ctx.discover_feed_pages:
-            fetch_page_cap = scan_ctx.discover_feed_pages + 10
+        discover_pages = int(scan_ctx.discover_feed_pages or 0)
+        if wanted_dynamic_ids:
+            # 有目标动态 id：扫完 pending_wanted 即停；页帽仅兜底，避免匹配失败时无限翻
+            fetch_page_cap = (
+                discover_pages + 15
+                if discover_pages
+                else max(20, (character_num or 3) * 5)
+            )
+        elif discover_pages:
+            fetch_page_cap = discover_pages + 10
+    pending_wanted = set(wanted_dynamic_ids)
 
     while True:
         if not dynamics or not isinstance(dynamics, dict):
@@ -603,6 +685,10 @@ def _scan_announces(
                 )
                 photo_url = _first_dyn_draw_src(item) or ""
                 if not nodes:
+                    if pending_wanted and item_id in pending_wanted:
+                        pending_wanted.discard(item_id)
+                        if not pending_wanted:
+                            return diag
                     continue
                 if not cache_only and not photo_url and not is_wanted_dynamic:
                     continue
@@ -668,13 +754,22 @@ def _scan_announces(
                         "bilibili_wanted_dynamic_no_announce id=%s",
                         item_id,
                     )
+                if pending_wanted and item_id in pending_wanted:
+                    pending_wanted.discard(item_id)
+                    if not pending_wanted:
+                        return diag
             except Exception as exc:
                 diag["skipped_exceptions"] += 1
+                sid = str(item.get("id_str") or "")
                 log_warning(
                     "bilibili_scan_item_error id=%s err=%s",
-                    item.get("id_str"),
+                    sid or item.get("id_str"),
                     exc,
                 )
+                if pending_wanted and sid in pending_wanted:
+                    pending_wanted.discard(sid)
+                    if not pending_wanted:
+                        return diag
 
         if reached_before_window:
             break
@@ -820,7 +915,7 @@ def fetch_character_supplementary_for_names(
             log_info=log_info,
         )
 
-    pool_view, pool_limited_ops = _load_pool_view(mid, headers)
+    pool_view, pool_limited_ops, pool_article_text = _load_pool_view(mid, headers)
     result: dict[str, dict[str, Any]] = {}
     scan_limit = max(len(targets) * 3, len(targets))
 
@@ -832,6 +927,7 @@ def fetch_character_supplementary_for_names(
             hit,
             pool_view=pool_view,
             pool_limited_ops=pool_limited_ops,
+            pool_article_text=pool_article_text,
             acquisition_method=acquisition_method,
             run_ocr=True,
             log_warning=log_warning,

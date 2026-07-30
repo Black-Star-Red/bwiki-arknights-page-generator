@@ -14,9 +14,10 @@ def _load(rel: str):
 
 
 _mapper_ops = _load("core/character_script/mapper_ops.py")
-_sp = _load("shared/sp_char_meta.py")
 _resolve = _mapper_ops.resolve_operator_char_id_for_name
 _alter = _mapper_ops.resolve_alter_operator_char_id
+_alter_for = _mapper_ops.resolve_alter_for_operator
+_guess = _mapper_ops.guess_alter_base_by_name_substring
 
 _ORCH_GROUPS = {
     "char_278_orchid": ["char_278_orchid", "char_1048_orchd2"],
@@ -58,7 +59,7 @@ class _FakeMapper:
         return default
 
 
-def test_sp_group_resolves_collab_skin_over_base_substring():
+def test_exact_name_resolves_collab_skin():
     mapper = _FakeMapper(
         {
             "char_278_orchid": {"name": "梓兰"},
@@ -70,16 +71,43 @@ def test_sp_group_resolves_collab_skin_over_base_substring():
     assert _resolve(mapper, "焰狐龙梓兰") == "char_1048_orchd2"
 
 
-def test_sp_group_without_meta_falls_back_to_longest_substring():
+def test_substring_does_not_become_current_char_id():
+    """予愿安洁莉娜 不得解析为本体 charId。"""
     mapper = _FakeMapper(
-        {
-            "char_278_orchid": {"name": "梓兰"},
-            "char_1048_orchd2": {"name": "焰狐龙梓兰"},
-        },
-        ["char_278_orchid", "char_1048_orchd2"],
-        sp_groups=None,
+        {"char_291_aglina": {"name": "安洁莉娜"}},
+        ["char_291_aglina"],
     )
-    assert _resolve(mapper, "焰狐龙梓兰") == "char_1048_orchd2"
+    assert _resolve(mapper, "予愿安洁莉娜") is None
+
+
+def test_dirty_stored_base_id_ignored_when_name_mismatch():
+    mapper = _FakeMapper(
+        {"char_291_aglina": {"name": "安洁莉娜"}},
+        ["char_291_aglina"],
+    )
+    assert (
+        _resolve(mapper, "予愿安洁莉娜", stored_char_id="char_291_aglina") is None
+    )
+
+
+def test_guess_alter_base_substring_for_preview_name():
+    mapper = _FakeMapper(
+        {"char_291_aglina": {"name": "安洁莉娜"}},
+        ["char_291_aglina"],
+    )
+    base, nm = _guess(mapper, "予愿安洁莉娜")
+    assert base == "char_291_aglina"
+    assert nm == "安洁莉娜"
+
+
+def test_resolve_alter_for_operator_uses_substring_when_not_in_table():
+    mapper = _FakeMapper(
+        {"char_291_aglina": {"name": "安洁莉娜", "isSpChar": False}},
+        ["char_291_aglina"],
+    )
+    alter, nm = _alter_for(mapper, "予愿安洁莉娜", None)
+    assert alter == "char_291_aglina"
+    assert nm == "安洁莉娜"
 
 
 def test_alter_partner_collab_skin_points_to_base():
@@ -94,6 +122,9 @@ def test_alter_partner_collab_skin_points_to_base():
     base, nm = _alter(mapper, "char_1048_orchd2")
     assert base == "char_278_orchid"
     assert nm == "梓兰"
+    alter, an = _alter_for(mapper, "焰狐龙梓兰", "char_1048_orchd2")
+    assert alter == "char_278_orchid"
+    assert an == "梓兰"
 
 
 def test_alter_partner_standard_alter():
@@ -120,3 +151,4 @@ def test_base_char_has_no_alter_partner():
         sp_groups=_CATAP_GROUPS,
     )
     assert _alter(mapper, "char_282_catap") == (None, None)
+    assert _alter_for(mapper, "空爆", "char_282_catap") == (None, "")

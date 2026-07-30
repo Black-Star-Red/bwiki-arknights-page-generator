@@ -83,24 +83,44 @@
             "operator_skill_id": "{operator_id}.skills[{skill_index}].skillId"
             },
             "value_maps": {
-            "phase": {
-                "0": "PHASE_0",
-                "1": "PHASE_1",
-                "2": "PHASE_2",
-                "PHASE_0": "PHASE_0",
-                "PHASE_1": "PHASE_1",
-                "PHASE_2": "PHASE_2"
-            }
+                "phase": {
+                    "0": "PHASE_0",
+                    "1": "PHASE_1",
+                    "2": "PHASE_2",
+                    "PHASE_0": "PHASE_0",
+                    "PHASE_1": "PHASE_1",
+                    "PHASE_2": "PHASE_2"
+                },
+                "profession": {
+                    "CASTER": "术师",
+                    "MEDIC": "医疗",
+                    "PIONEER": "先锋",
+                    "SNIPER": "狙击",
+                    "SPECIAL": "特种",
+                    "SUPPORT": "辅助",
+                    "TANK": "重装",
+                    "WARRIOR": "近卫"
+                },
+                "position": {
+                    "RANGED": "远程位",
+                    "MELEE": "近战位",
+                    "ALL": "全部位"
+                },
+                "operator_position": {
+                    "RANGED": "远程位",
+                    "MELEE": "近战位",
+                    "ALL": "全部位"
+                }
             },
             "field_meta": {
-            "currentCharId": { "kind": "var", "type": "string", "required": true },
-            "charIdS": { "path": "charIdS", "type": "list[string]", "required": true },
-            "rarity": { "path": "rarity", "type": "string", "required": true },
-            "talent_phase": {
-                "path": "talent_phase",
-                "type": "string",
-                "enum": ["PHASE_0", "PHASE_1", "PHASE_2"]
-            }
+                "currentCharId": { "kind": "var", "type": "string", "required": true },
+                "charIdS": { "path": "charIdS", "type": "list[string]", "required": true },
+                "rarity": { "path": "rarity", "type": "string", "required": true },
+                "talent_phase": {
+                    "path": "talent_phase",
+                    "type": "string",
+                    "enum": ["PHASE_0", "PHASE_1", "PHASE_2"]
+                }
             }
         },
         {
@@ -200,15 +220,30 @@
             "field_mappings": {
             "items": "items",
             "item_id": "",
-            "item_name": "items[item_id].name",
-            "item_name_by_id": "items.{item_id}.name",
-            "item_description": "items[item_id].description",
-            "item_rarity": "items[item_id].rarity",
-            "item_icon": "items[item_id].iconId",
-            "item_usage": "items[item_id].itemUsage",
-            "item_type": "items[item_id].itemType",
-            "classify_type": "items[item_id].classifyType",
-            "stage_drop_list": "items[item_id].stageDropList"
+            "item_name": "items.{item_id}.name",
+            "item_description": "items.{item_id}.description",
+            "item_rarity": "items.{item_id}.rarity",
+            "item_icon": "items.{item_id}.iconId",
+            "item_usage": "items.{item_id}.usage",
+            "item_type": "items.{item_id}.itemType",
+            "item_obtain_approach": "items.{item_id}.obtainApproach",
+            "classify_type": "items.{item_id}.classifyType",
+            "stage_drop_list": "items.{item_id}.stageDropList"
+            },
+            "value_maps": {
+                "item_rarity": {
+                    "TIER_1": "0",
+                    "TIER_2": "2",
+                    "TIER_3": "3",
+                    "TIER_4": "3",
+                    "TIER_5": "4",
+                    "TIER_6": "5"
+                },
+                "classify_type": {
+                    "MATERIAL": "M",
+                    "NORMAL": "N",
+                    "CONSUME": "C"
+                }
             }
         },
         {
@@ -228,6 +263,7 @@
             "buff_char_index": "",
             "buff_data_index": "",
             "buff_id": "",
+            "skillIcon": "buffs.{buff_id}.skillIcon",
             "char_buff_data": "chars.{char_id}.buffChar[{buff_char_index}].buffData",
             "buff_name": "buffs.{buff_id}.buffName",
             "buff_room_type": "buffs.{buff_id}.roomType",

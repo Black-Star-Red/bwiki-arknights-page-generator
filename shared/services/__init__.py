@@ -43,4 +43,5 @@ __all__ = [
     "ocr_exec",
     "ocr_operator_profile",
     "upload_operator_portrait_if_enabled",
+    "resolve_hypergryph_settings",
 ]

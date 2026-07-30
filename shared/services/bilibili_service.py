@@ -12,8 +12,23 @@ from typing import Any, Callable
 from bs4 import BeautifulSoup
 import json
 import requests
-
 from shared.collab_supplementary import pick_collab_gacha_pool
+from shared.utils.format_date import format_zh_ymd
+from shared.services.hypergryph_settings import resolve_hypergryph_settings
+from core.script_logging import log_info
+
+# 活动公告长文中 SideStory 常在第二行，不能用 match 要求全文开头
+_SIDE_STORY_IN_TEXT_RE = re.compile(r"SideStory「([^」]+)」")
+# 联动总公告首行：【明日方舟 × …】「泡影苍霆」限时活动…
+_COLLAB_EVENT_TITLE_RE = re.compile(r"「([^」]+)」(?:限时活动|活动关卡|活动)")
+# 排除维护公告里的「修复主题曲「二次呼吸」关卡」等描述性用语
+_MAIN_THEME_ACTIVITY_RE = re.compile(r"(?<!修复)主题曲「([^」]+)」(?:篇章|限时|活动|即将|开启)")
+# 鹰角公告正文：活动时间：08月01日 …
+_ACTIVITY_OPEN_RE = re.compile(
+    r"(?:活动时间|关卡开放时间|开放时间)[：:]\s*"
+    r"(?:(\d{4})年)?\s*(\d{1,2})月(\d{1,2})日"
+)
+
 
 def slice_json_object_after_key(text: str, key: str = "initialData") -> dict:
     # 常见：\"initialData\":{  或  "initialData":{
@@ -231,12 +246,6 @@ class BilibiliScanContext:
     discover_feed_pages: int | None = None
 
 
-# 活动公告长文中 SideStory 常在第二行，不能用 match 要求全文开头
-_SIDE_STORY_IN_TEXT_RE = re.compile(r"SideStory「([^」]+)」")
-# 联动总公告首行：【明日方舟 × …】「泡影苍霆」限时活动…
-_COLLAB_EVENT_TITLE_RE = re.compile(r"「([^」]+)」(?:限时活动|活动关卡|活动)")
-# 排除维护公告里的「修复主题曲「二次呼吸」关卡」等描述性用语
-_MAIN_THEME_ACTIVITY_RE = re.compile(r"(?<!修复)主题曲「([^」]+)」(?:篇章|限时|活动|即将|开启)")
 
 
 def _extract_side_story_from_text(text: str) -> str | None:
@@ -386,8 +395,27 @@ def _main_theme_reward_obtain_path(activity_name: str | None) -> str:
     if name:
         return f"【{name}】主题曲获取、主题曲获取"
     return "主题曲获取"
-
-
+def _normalize_reward_gacha_pool(gacha_pool: str) -> tuple[str, str | None]:
+    """
+    长名公告池 → (规范类型, 「」内主题名或 None)。
+    已是规范短名则原样返回。
+    """
+    p = (gacha_pool or "").strip()
+    if p in ("活动奖励干员", "主题曲奖励干员", "集成战略奖励干员"):
+        return p, None
+    # 集成战略「沉沦者的黑流树海」奖励干员
+    if p.startswith("集成战略") and "奖励干员" in p:
+        return "集成战略奖励干员", _side_story_activity_name(p)
+    if p.endswith("奖励干员") and ("「" in p or "『" in p):
+        # 其它带书名号的奖励干员长句，按活动奖励处理
+        return "活动奖励干员", _side_story_activity_name(p)
+    return p, None
+def _is_reward_obtain_path(activity_name: str | None) -> str:
+    """集成战略奖励：【黑流树海】集成战略活动获取、活动获取。"""
+    name = (activity_name or "").strip()
+    if name:
+        return f"【{name}】集成战略活动获取、活动获取"
+    return "集成战略活动获取、活动获取"
 def apply_gui_activity_obtain_path(
     value: dict[str, Any],
     gui_activity_name: str | None,
@@ -626,6 +654,134 @@ def _collab_gacha_pool_label(
         return gacha_pool.strip() or None
     return None
 
+def _bulletin_plain_text(raw: str) -> str:
+    """公告正文多为 HTML（如 <strong>活动时间：</strong>08月01日），去标签后再匹配。"""
+    text = (raw or "").replace("\\n", "\n")
+    if "<" in text and ">" in text:
+        try:
+            text = BeautifulSoup(text, "html.parser").get_text("\n")
+        except Exception:
+            text = re.sub(r"<[^>]+>", "", text)
+    return text
+
+
+def resolve_bulletin_activity_date_label(
+    scan_ctx: BilibiliScanContext | None,
+    *,
+    activity_name: str | None = None,
+) -> str | None:
+    """从鹰角游戏内公告解析活动开日，供实装日期 date_label。
+
+    用活动名（SideStory 名等）在标题/header/正文中匹配，再取附近「活动时间」。
+    自行 load_config，避免层层传递 mapper/config。
+    """
+    if scan_ctx is None:
+        return None
+    needle = (
+        (activity_name or "").strip()
+        or (scan_ctx.cached_activity_name or "").strip()
+        or (scan_ctx.gui_activity_name or "").strip()
+    )
+    cache_map = getattr(scan_ctx, "_bulletin_date_by_needle", None)
+    if not isinstance(cache_map, dict):
+        cache_map = {}
+        scan_ctx._bulletin_date_by_needle = cache_map
+    cache_key = needle or ""
+    if cache_key in cache_map:
+        return cache_map[cache_key] or None
+
+    try:
+        from data import load_config, resolve_config_path
+
+        config = load_config(resolve_config_path("config.json"))
+        settings = resolve_hypergryph_settings(config)
+        list_url = settings["bulletin_list_url"]
+        detail_url = settings["bulletin_detail_url"]
+        target = settings["bulletin_target"]
+    except Exception:
+        cache_map[cache_key] = ""
+        log_info("resolve_bulletin_activity_date_label: error resolving hypergryph settings")
+        return None
+    try:
+        listing = requests.get(list_url, params={"target": target}, timeout=10).json()
+        items = (listing.get("data") or {}).get("list") or []
+    except Exception:
+        cache_map[cache_key] = ""
+        log_info("resolve_bulletin_activity_date_label: error getting bulletin list")
+        return None
+
+    def _norm_title(raw: str) -> str:
+        return (raw or "").replace("\\n", "").replace("\n", "")
+
+    # 标题含活动名优先；否则扫「活动限时/即将开启」类，再在正文里确认
+    ordered: list[dict] = []
+    seen_cid: set[str] = set()
+    if needle:
+        for it in items:
+            title = _norm_title(it.get("title") or "")
+            cid = str(it.get("cid") or "") or ""
+            if not cid or cid in seen_cid:
+                continue
+            if needle in title:
+                ordered.append(it)
+                seen_cid.add(cid)
+    for it in items:
+        title = _norm_title(it.get("title") or "")
+        cid = str(it.get("cid") or "") or ""
+        if not cid or cid in seen_cid:
+            continue
+        if "活动限时开启" in title or "活动即将开启" in title:
+            ordered.append(it)
+            seen_cid.add(cid)
+
+    label: str | None = None
+    for it in ordered[:12]:
+        cid = str(it.get("cid") or "") or ""
+        if not cid:
+            continue
+        try:
+            detail = requests.get(detail_url.format(cid=cid), timeout=10).json()
+            data = detail.get("data") or {}
+            title = _norm_title(data.get("title") or it.get("title") or "")
+            header = _bulletin_plain_text(data.get("header") or "")
+            content = _bulletin_plain_text(data.get("content") or "")
+            display = (data.get("displayTime") or "").strip()
+        except Exception:
+            log_info(
+                "resolve_bulletin_activity_date_label: error getting bulletin detail cid=%s",
+                cid,
+            )
+            continue
+        blob = f"{title}\n{header}\n{content}"
+        if needle and needle not in blob:
+            continue
+        pos = content.find(needle) if needle else -1
+        region = content[pos:] if pos >= 0 else content
+        m = _ACTIVITY_OPEN_RE.search(region) or _ACTIVITY_OPEN_RE.search(content)
+        if not m:
+            continue
+        year = int(m.group(1)) if m.group(1) else None
+        month, day = int(m.group(2)), int(m.group(3))
+        if year is None and display:
+            try:
+                year = int(display.split("-", 1)[0])
+            except ValueError:
+                year = None
+        if year is None:
+            year = datetime.now().year
+        label = format_zh_ymd(year, month, day)
+        log_info(
+            "resolve_bulletin_activity_date_label: hit needle=%s cid=%s label=%s",
+            needle or None,
+            cid,
+            label,
+        )
+        break
+
+    cache_map[cache_key] = label or ""
+    scan_ctx._bulletin_date_label = label or ""
+    return label
+
 
 def _obtain_path_for_gacha_pool(
     gacha_pool: str,
@@ -637,6 +793,8 @@ def _obtain_path_for_gacha_pool(
     collab_pool: str | None = None,
 ) -> str:
     """按卡池名生成获取途径；未在 ACQUISITION_METHOD 中的命名池视为限定寻访。"""
+    if gacha_pool and ("集成战略" in gacha_pool and "奖励干员" in gacha_pool):
+        return _is_reward_obtain_path(activity_name)
     if gacha_pool == "主题曲奖励干员":
         return _main_theme_reward_obtain_path(activity_name)
     if gacha_pool == "活动奖励干员":

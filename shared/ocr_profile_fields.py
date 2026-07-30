@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from typing import Callable
-
+from core.script_logging import log_info
 WarnFn = Callable[[str, object], None] | None
 
 
@@ -407,13 +407,19 @@ def _mastery_label_core(line: str) -> str | None:
     return ln[ln.find("专精") :]
 
 
-def _is_mastery_label_line(line: str) -> bool:
+def _mastery_label_core_if_label(line: str) -> str | None:
     core = _mastery_label_core(line)
     if not core:
-        return False
-    if re.match(r"^[\s·•・\*＊\+\-–—：:]*专精[\s·•・\*＊\+\-–—：:]*$", core):
-        return True
-    return bool(re.match(r"^专精\s*[：:]", core))
+        return None
+    # if re.match(r"^[\s·•・\*＊\+\-–—：:]*专精[\s·•・\*＊\+\-–—：:]*$", core):
+    if re.match(r"专精[\s·•・\*＊\+\-–—：:]*$", core):
+        return core
+    if re.match(r"^专精.*$", core):
+        log_info("专精行: %s", core)
+    if bool(re.match(r"^专精\s*[：:]", core)):
+        return core
+    else:
+        return None
 
 
 def _is_valid_mastery_part(part: str) -> bool:
@@ -426,7 +432,32 @@ def _is_valid_mastery_part(part: str) -> bool:
         return False
     return len(p) >= 2 or any("\u4e00" <= c <= "\u9fff" for c in p)
 
-
+def _mastery_parts_before_label(lines: list[str], label_idx: int,*,follow_has_content:bool) -> list[str]:
+    """OCR 先值后标：专精标签前一行若像专精列表则取用。"""
+    if label_idx <= 0:
+        return []
+    prev = (lines[label_idx - 1] or "").strip()
+    if not prev or _mastery_label_core_if_label(prev) is not None:
+        return []
+    if _MASTERY_STOP_RE.match(prev) or prev.isdigit():
+        return []
+    # 画师 / CV / 噪声行
+    if re.search(
+        r"(?:绘制|绑制|原案|Studio|CV|冷泉|三浦|^[\u2022\u00b7·・\*＊\+\-–—]+$)",
+        prev,
+        re.I,
+    ):
+        return []
+    has_dun = bool(re.search(r"[、，,]",prev))
+    if follow_has_content and not has_dun:
+        return []
+    if has_dun:
+        return _split_mastery_parts(prev)
+        
+    cleaned = _clean_ocr_name_line(prev)
+    if _is_valid_mastery_part(cleaned):
+        return [cleaned]
+    return []
 def _split_mastery_parts(fragment: str) -> list[str]:
     fragment = (fragment or "").strip().lstrip("：:").strip()
     if not fragment:
@@ -439,10 +470,13 @@ def _split_mastery_parts(fragment: str) -> list[str]:
     return parts
 
 
-def _inline_mastery_from_label(line: str) -> list[str]:
-    core = _mastery_label_core(line)
-    if not core:
-        return []
+def _inline_mastery_from_label(core: str) -> list[str]:
+    #调用方已用 _mastery_label_core_if_label 筛过，入参即为 core
+    # 此处 core 理论上非空；仍取 core 是为了去掉行首 ·/+ 等前缀再解析。
+    # core = _mastery_label_core(line)
+    # if not core:
+    #     return []
+
     same = re.search(r"^专精\s*[：:]\s*(.+)$", core)
     if same:
         return _split_mastery_parts(same.group(1))
@@ -478,9 +512,10 @@ def extract_mastery(text: str) -> str | None:
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
 
     for i, line in enumerate(lines):
-        if not _is_mastery_label_line(line):
+        core = _mastery_label_core_if_label(line)
+        if core is None:
             continue
-        parts = _inline_mastery_from_label(line)
+        parts = _inline_mastery_from_label(core)
         continuation = False
 
         j = i + 1
@@ -510,9 +545,12 @@ def extract_mastery(text: str) -> str | None:
                 break
             n += 1
             j += 1
-
-        if parts:
-            return "、".join(parts)
+        prev_parts = _mastery_parts_before_label(
+            lines, i, follow_has_content=bool(parts)
+        )
+        merged = prev_parts + [p for p in parts if p not in prev_parts]
+        if merged:
+            return "、".join(merged)
     return None
 
 

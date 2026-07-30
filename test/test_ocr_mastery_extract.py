@@ -40,3 +40,15 @@ def test_extract_mastery_plus_wrapped_label_line():
     """「专精」标签行首 + 后接标签的 “+” 时，正常解析。"""
     text = "+专精+\n应用源石学、\n信息与计算科学"
     assert extract_mastery(text) == "应用源石学、信息与计算科学"
+
+def test_extract_mastery_value_before_label_mechanist():
+    """机械师预告图：OCR 先输出专精前半段，再出「专精」标签。"""
+    text = (
+        "哥伦比亚\n出身\n机械工程、电气工程\n专精\n化学工程、过量劳动\n"
+        "绘制\nStudioMontagne\n原案\nCenm0"
+    )
+    assert extract_mastery(text) == "机械工程、电气工程、化学工程、过量劳动"
+    
+def test_extract_mastery_value_before_label_does_not_eat_drawer():
+    text = "绘\n\u2022二开\n专精\n草药学、护理学"
+    assert extract_mastery(text) == "草药学、护理学"

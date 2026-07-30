@@ -36,4 +36,4 @@ packages = [
 [tool.pytest.ini_options]
 testpaths = ["test"]
 # 未执行 pip install -e . 时，仍可通过「仓库父目录」解析 import arknights_toolbox
-pythonpath = [".."]
+pythonpath = [".",".."]

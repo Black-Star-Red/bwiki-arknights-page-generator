@@ -28,6 +28,7 @@ def run_character_pipeline(
     log_path=None,
     no_log_file: bool = False,
     quiet: bool = False,
+    force_bilibili_fetch: bool = False,
     interactive: bool = True,
     wiki_use_test_page: bool = True,
     wiki_confirm: Callable[[str, str], bool] | None = None,
@@ -86,6 +87,7 @@ def run_character_pipeline(
                 dynamic_end_ts=dynamic_end_ts,
                 activity_name=activity_name,
                 activity_is_main_theme=activity_is_main_theme,
+                force_bilibili_fetch=force_bilibili_fetch,
             )
         script_log.info("stage_end run_id=%s stage=generate_template output_len=%d", run_id, len(tpl or ""))
         return tpl or ""

@@ -7,29 +7,14 @@ from data.mapper_helpers import bind_operator
 from core.script_logging import log_warning
 from shared.globals import (
     MAPPING_SKILL_TYPE as mapping_skill_type,
-    POSITION as position,
     SKILL_TRIGGER_TYPE as skill_trigger_type,
     SKILL_TYPE as skill_type,
 )
-from shared.rendering import render_summon_template_lines
-
-
-def _collect_token_keys(raw_value) -> list[str]:
-    keys: list[str] = []
-    if isinstance(raw_value, str):
-        if raw_value.strip():
-            keys.append(raw_value.strip())
-        return keys
-    if isinstance(raw_value, list):
-        for item in raw_value:
-            keys.extend(_collect_token_keys(item))
-        return keys
-    if isinstance(raw_value, dict):
-        for v in raw_value.values():
-            keys.extend(_collect_token_keys(v))
-        return keys
-    return keys
-
+from shared.rendering.summon import (
+    collect_operator_token_keys,
+    render_summon_template_lines,
+    resolve_token_display_name,
+)
 
 def resolve_summon_target_by_charid(mapper, summon_charid: str):
     """通过附属单位 charId(overrideTokenKey) 反查所属干员与召唤物信息。"""
@@ -138,7 +123,6 @@ def generate_summon_template_by_charid(mapper, charid: str) -> str:
         trait_candidates,
         rich_styles,
         term_description_dict,
-        position,
         mapping_skill_type,
         skill_type,
         skill_trigger_type,

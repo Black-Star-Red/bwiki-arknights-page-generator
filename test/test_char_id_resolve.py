@@ -39,13 +39,22 @@ class _FakeMapper:
         return default
 
 
-def test_stored_char_id_used_when_exact_name_missing():
+def test_stored_char_id_used_when_exact_name_missing_and_not_in_table():
+    """表外预写 id 仍可用于简版；表内脏本体 id 见 name mismatch 测试。"""
     mapper = _FakeMapper(
         {"char_1038_orchid": {"name": "梓兰"}},
         ["char_1038_orchid"],
     )
     cid = _resolve(mapper, "焰狐龙梓兰", stored_char_id="char_1048_orchd2")
     assert cid == "char_1048_orchd2"
+
+
+def test_stored_in_table_requires_name_match():
+    mapper = _FakeMapper(
+        {"char_1038_orchid": {"name": "梓兰"}},
+        ["char_1038_orchid"],
+    )
+    assert _resolve(mapper, "焰狐龙梓兰", stored_char_id="char_1038_orchid") is None
 
 
 def test_exact_name_wins_over_stored():

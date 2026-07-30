@@ -311,6 +311,7 @@ class OperatorSupplementaryRepository:
         supplementary: dict[str, str],
         *,
         char_id: str | None = None,
+        clear_char_id: bool = False,
         source: str = "bilibili",
     ) -> None:
         if not self.available or not self._settings["write_after_fallback"]:
@@ -325,7 +326,9 @@ class OperatorSupplementaryRepository:
             if row is None:
                 row = OperatorSupplementary(name=name)
                 session.add(row)
-            if char_id:
+            if clear_char_id:
+                row.char_id = None
+            elif char_id:
                 row.char_id = char_id
             for key, col in _KEY_TO_COLUMN.items():
                 val = row_payload.get(key) or ""
@@ -339,7 +342,7 @@ class OperatorSupplementaryRepository:
         log_info(
             "已写入 operator_supplementary：%s char_id=%s 画师=%s 专精=%s",
             name,
-            char_id or "",
+            (None if clear_char_id else char_id) or "",
             drawer[:40] + ("…" if len(drawer) > 40 else ""),
             spec[:40] + ("…" if len(spec) > 40 else ""),
         )

@@ -265,6 +265,8 @@ def resolve_supplementary_data(
 
     activity_is_main_theme: bool = False,
 
+    force_bilibili_fetch: bool = False,
+
 ) -> dict[str, dict[str, Any]]:
 
     """
@@ -366,6 +368,8 @@ def resolve_supplementary_data(
 
             scan_ctx=scan_ctx,
 
+            force_bilibili_fetch=force_bilibili_fetch,
+
         )
 
 
@@ -454,6 +458,8 @@ def resolve_supplementary_data(
 
         scan_ctx=scan_ctx,
 
+        force_bilibili_fetch=force_bilibili_fetch,
+
     )
 
 
@@ -498,6 +504,8 @@ def _resolve_for_names(
 
     scan_ctx: BilibiliScanContext | None = None,
 
+    force_bilibili_fetch: bool = False,
+
 ) -> dict[str, dict[str, Any]]:
     del bili_prefetch, character_num  # 不再使用 discover 阶段预取
     gui_activity = (activity_name or "").strip() or None
@@ -526,7 +534,7 @@ def _resolve_for_names(
             if db_part is None and cid:
                 db_part = repo.get_by_char_id(cid)
 
-        if use_db and db_part and not needs_supplementary_fetch(db_part, fill_fields):
+        if use_db and db_part and not force_bilibili_fetch and not needs_supplementary_fetch(db_part, fill_fields):
             merged = enrich_collab_meta(apply_db_with_bili_meta(db_part, None))
             merged = apply_collab_period_supplementary_meta(merged, scan_ctx)
             if gui_activity:
@@ -548,13 +556,15 @@ def _resolve_for_names(
                 and has_meaningful_supplementary(merged)
                 and supplementary_payload_changed(merged, db_part)
             ):
+                stored_now = repo.get_char_id_by_name(name)
                 cid = cid_by_name.get(name) or resolve_operator_char_id_for_name(
-                    mapper, name, stored_char_id=repo.get_char_id_by_name(name)
+                    mapper, name, stored_char_id=stored_now
                 )
                 repo.upsert(
                     name,
                     supplementary_for_upsert(merged),
                     char_id=cid,
+                    clear_char_id=bool(stored_now) and not cid,
                     source="gui_reconcile",
                 )
             continue
@@ -624,9 +634,20 @@ def _resolve_for_names(
         )
 
         if use_db and settings["write_after_fallback"] and has_meaningful_supplementary(merged):
-            cid = cid_by_name.get(name) or resolve_operator_char_id_for_name(mapper, name)
+            stored_now = repo.get_char_id_by_name(name) if use_db else None
+            cid = cid_by_name.get(name)
+            if cid is None:
+                cid = resolve_operator_char_id_for_name(
+                    mapper, name, stored_char_id=stored_now
+                )
             source = "bilibili" if has_meaningful_supplementary(bili_part) else "db"
-            repo.upsert(name, supplementary_for_upsert(merged), char_id=cid, source=source)
+            repo.upsert(
+                name,
+                supplementary_for_upsert(merged),
+                char_id=cid,
+                clear_char_id=bool(stored_now) and not cid,
+                source=source,
+            )
 
     return result
 

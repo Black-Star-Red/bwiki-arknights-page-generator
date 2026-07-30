@@ -205,9 +205,6 @@ def render_operator_progression_fields(mapper, star):
     lines.append(f"|初始攻击={phases0_data.get('atk', '') if phases0_data else ''}")
     lines.append(f"|初始防御={phases0_data.get('def', '') if phases0_data else ''}")
     lines.append(f"|初始法抗={int(phases0_data.get('magicResistance', 0)) if phases0_data else ''}")
-    range_ids = mapper.get_data_safe("character_table", "rangeId") or []
-    lines.append(f"|初始攻击范围={range_ids[0] if range_ids else ''}")
-
     lines.append(f"|再部署={phases0_data.get('respawnTime', '') if phases0_data else ''}")
     lines.append(f"|部署费用={phases0_data.get('cost', '') if phases0_data else ''}")
     lines.append(f"|完美部署费用={costPro}<!-- 计算精二满潜费用 -->")
@@ -218,7 +215,8 @@ def render_operator_progression_fields(mapper, star):
     lines.append(f"|攻击速度={attack_speed}<!-- 写攻击速度的值 -->")
     lines.append(f"|攻击间隔={phases0_data.get('baseAttackTime', '') if phases0_data else ''}<!-- 写攻击间隔的值 -->")
     lines.append("|bb备注=")
-
+    range_ids = mapper.get_data_safe("character_table", "rangeId") or []
+    lines.append(f"|初始攻击范围={range_ids[0] if range_ids else ''}")
     phases0_max_data = mapper.get_data_safe("character_table", "phase0_attr_max_data")
     lines.append(f"|初始生命max={phases0_max_data.get('maxHp', '') if phases0_max_data else ''}")
     lines.append(f"|初始攻击max={phases0_max_data.get('atk', '') if phases0_max_data else ''}")
