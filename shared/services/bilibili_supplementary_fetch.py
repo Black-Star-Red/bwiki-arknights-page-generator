@@ -214,10 +214,10 @@ def _build_character_from_hit(
             profile = ocr_operator_profile(str(photo_path))
             character["专精"] = profile.get("专精") or ""
             character["画师"] = profile.get("画师") or ""
-        except Exception:
+        except Exception as e:
             character["专精"] = ""
             character["画师"] = ""
-            log_warning("预告图 OCR 失败（专精/画师），已降级为空 name=%s", name)
+            log_warning("预告图 OCR 失败（专精/画师），已降级为空 name=%s error=%s", name, e)
 
     op_ts = _dynamic_pub_ts(item)
     pools = collab_gacha_pools_at_or_before(scan_ctx, op_ts)

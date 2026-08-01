@@ -76,3 +76,6 @@ ujson==5.12.1
 urllib3==2.6.3
 wcwidth==0.7.0
 wheel==0.47.0
+# OCR 引擎（CPU）。若 PyPI 装不上，改用：
+# python -m pip install paddlepaddle==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
+paddlepaddle==3.0.0
