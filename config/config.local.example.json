@@ -1,0 +1,8 @@
+{
+    "cookies": "",
+    "database": {
+      "enabled": false,
+      "url": "mysql+pymysql://user:password@localhost:3306/arknights?charset=utf8mb4"
+    },
+    "bilibili_mid": "161775300"
+  }
