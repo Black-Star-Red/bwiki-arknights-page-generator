@@ -79,11 +79,9 @@ def resolve_operator_char_id_for_name(
     if not stored:
         return None
     if _char_id_in_table(mapper, stored):
-        # 表内 id：名字必须对上，避免「予愿安洁莉娜」误用本体 char_291_aglina
         if _table_name_for_cid(mapper, stored) == name:
             return stored
         return None
-    # 本地表尚无该 id：信任库中预写的本人 id（简版模板）
     return stored
 
 

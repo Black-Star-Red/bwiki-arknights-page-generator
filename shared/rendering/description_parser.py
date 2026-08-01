@@ -7,7 +7,9 @@ from collections import defaultdict
 
 
 def _resolve_term_index_maps(term_description_dict, term_index_cache):
-    """Build or reuse tag->(name,index) maps for term description ids."""
+    """
+    构建或重用 term description id 到 (name,index) 的映射。
+    """
     if not isinstance(term_description_dict, dict):
         return {}, {}
     if not isinstance(term_index_cache, dict):

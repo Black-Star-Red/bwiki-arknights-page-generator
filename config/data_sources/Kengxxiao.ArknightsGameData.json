@@ -91,6 +91,14 @@
                     "PHASE_1": "PHASE_1",
                     "PHASE_2": "PHASE_2"
                 },
+                "phase_label": {
+                    "0": "精英化0",
+                    "1": "精英化1",
+                    "2": "精英化2",
+                    "PHASE_0": "精英化0",
+                    "PHASE_1": "精英化1",
+                    "PHASE_2": "精英化2"
+                },
                 "profession": {
                     "CASTER": "术师",
                     "MEDIC": "医疗",
@@ -273,14 +281,14 @@
             "buff_cond_level": "chars.{char_id}.buffChar[{buff_char_index}].buffData[{buff_data_index}].cond.level"
             },
             "value_maps": {
-            "phase": {
-                "0": "PHASE_0",
-                "1": "PHASE_1",
-                "2": "PHASE_2",
-                "PHASE_0": "PHASE_0",
-                "PHASE_1": "PHASE_1",
-                "PHASE_2": "PHASE_2"
-            }
+                "phase": {
+                    "0": "精英化0",
+                    "1": "精英化1",
+                    "2": "精英化2",
+                    "PHASE_0": "精英化0",
+                    "PHASE_1": "精英化1",
+                    "PHASE_2": "精英化2"
+                }
             }
         },
         {

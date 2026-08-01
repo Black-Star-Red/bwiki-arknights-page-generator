@@ -243,7 +243,7 @@ def generate_template(
                     )
                 parts.append(f"|英文名={mapper.get_data_safe('character_table', 'appellation') or ''}")
                 parts.append(f"|职业={mapper.get_data_safe('character_table', 'profession')}")
-                star = mapper.get_data_safe("character_table", "rarity")
+                star = mapper.get_data_safe('character_table', 'rarity')
                 parts.append(f"|星级={star}")
                 parts.append(f"|干员编号={mapper.get_data_safe('character_table', 'displayNumber')}<!-- 类似B101格式的编号 -->")
                 item = []
@@ -392,9 +392,23 @@ def generate_template(
                 )
                 )
 
-                drawer = resolve_drawer_with_fallback(
+                drawer,drawer_source = resolve_drawer_with_fallback(
                     mapper, Id, db_drawer=value.get("画师")
                 )
+                if (
+                    use_sup_db
+                    and drawer.strip()
+                    and drawer_source.startswith("skin_table") 
+                    and drawer.strip() != (value.get("画师") or "").strip()
+                ):
+                    patch = dict(value)
+                    patch["画师"] = drawer
+                    sup_repo.upsert(
+                        name,
+                        patch,
+                        char_id=Id or None,
+                        source="skin_table",
+                    )
                 parts.append(f"|画师={drawer}")
 
                 parts.extend(render_operator_skin_template_lines(mapper, Id))
@@ -477,11 +491,11 @@ def generate_template(
             parts.clear()
             parts.append("{{材料图鉴")
             parts.append(f"|材料名称={name}招聘合同")
-            parts.append(f"|材料介绍={mapper.get_data_safe('character_table', 'itemUsage')}")
-            parts.append(f"|材料备注={mapper.get_data_safe('character_table', 'itemDesc')}")
+            parts.append(f"|材料介绍={mapper.get_data_safe('character_table', 'itemUsage') or ''}")
+            parts.append(f"|材料备注={mapper.get_data_safe('character_table', 'itemDesc') or ''}")
             parts.append(f"|itemid={Id}")
             parts.append("|材料类型=干员信物")
-            parts.append(f"|获得方式={mapper.get_data_safe('character_table', 'itemObtainApproach')}")
+            parts.append(f"|获得方式={mapper.get_data_safe('character_table', 'itemObtainApproach') or ''}")
             parts.append("|固定掉落=")
             parts.append("|大概率=")
             parts.append("|概率掉落=")
@@ -489,8 +503,9 @@ def generate_template(
             parts.append("|罕见=")
             parts.append("|额外物资=")
             parts.append("|基建生产=")
-            parts.append(f"|稀有度={mapper.get_data_safe("character_table", "rarity")}")
+            parts.append(f"|稀有度={mapper.get_data_safe('character_table', 'rarity') or ''}")
             parts.append("|备注=")
+            parts.append("}}")
             ContractAndToken_enabled = wiki_yes_no(
                     f"干员{name}招聘合同和信物页面确定创建(Y/N):",
                     wiki_key="wiki_ContractAndToken",
@@ -511,17 +526,22 @@ def generate_template(
             parts.clear()
             potentialItemId = mapper.get_data_safe("character_table", "potentialItemId")
             if potentialItemId:
-                set_current_char_id(mapper,"item_table","item_id", potentialItemId)
+                set_current_char_id(mapper, "item_table", "item_id", potentialItemId)
                 parts.append("{{材料图鉴")
-                parts.append(f"|材料名称={mapper.get_data_safe('item_table', 'item_name')}")
-                parts.append(f"|材料介绍={mapper.get_data_safe('item_table', 'item_usage')}")
-                parts.append(f"|材料备注={mapper.get_data_safe('item_table', 'item_description')}")
+                parts.append(f"|材料名称={mapper.get_data_safe('item_table', 'item_name') or ''}")
+                parts.append(f"|材料介绍={mapper.get_data_safe('item_table', 'item_usage') or ''}")
+                parts.append(f"|材料备注={mapper.get_data_safe('item_table', 'item_description') or ''}")
                 parts.append(f"|itemid={potentialItemId}")
-                parts.append(f"|img=")
-                parts.append(f"|材料类型=干员信物")
-                parts.append(f"|获得方式={mapper.get_data_safe('item_table', 'item_obtain_approach')}")
-                parts.append(f"|稀有度={mapper.get_data_safe("item_table", "item_rarity")}")
-                parts.append(f"|仓库分类={mapper.get_data_safe('item_table', 'classify_type')}")
+                parts.append("|材料类型=干员信物")
+                parts.append(f"|获得方式={mapper.get_data_safe('item_table', 'item_obtain_approach') or ''}")
+                parts.append("|固定掉落=")
+                parts.append("|大概率=")
+                parts.append("|概率掉落=")
+                parts.append("|小概率=")
+                parts.append("|罕见=")
+                parts.append("|额外物资=")
+                parts.append("|基建生产=")
+                parts.append(f"|稀有度={mapper.get_data_safe('item_table', 'item_rarity') or ''}")
                 parts.append("|备注=")
                 parts.append("}}")
             publish_wiki_page_if_enabled(

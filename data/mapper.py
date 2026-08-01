@@ -470,7 +470,6 @@ class DataMapper:
         prev_value_maps = self.value_maps
         prev_field_meta = self.field_meta
 
-        # Temporarily disable fixed-group selection to allow explicit switch.
         self._requested_data_source_group = None
         self._install_data_sources_group(group_key)
         try:

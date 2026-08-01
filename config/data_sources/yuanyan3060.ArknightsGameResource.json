@@ -91,7 +91,20 @@
                     "PHASE_1": "PHASE_1",
                     "PHASE_2": "PHASE_2"
                 },
+                "phase_label": {
+                    "0": "精英化0",
+                    "1": "精英化1",
+                    "2": "精英化2",
+                    "PHASE_0": "精英化0",
+                    "PHASE_1": "精英化1",
+                    "PHASE_2": "精英化2"
+                },
                 "position": {
+                    "RANGED": "远程位",
+                    "MELEE": "近战位",
+                    "ALL": "全部位"
+                },
+                "operator_position": {
                     "RANGED": "远程位",
                     "MELEE": "近战位",
                     "ALL": "全部位"
@@ -219,8 +232,9 @@
             "item_description": "items.{item_id}.description",
             "item_rarity": "items.{item_id}.rarity",
             "item_icon": "items.{item_id}.iconId",
-            "item_usage": "items.{item_id}.itemUsage",
+            "item_usage": "items.{item_id}.usage",
             "item_type": "items.{item_id}.itemType",
+            "item_obtain_approach": "items.{item_id}.obtainApproach",
             "classify_type": "items.{item_id}.classifyType",
             "stage_drop_list": "items.{item_id}.stageDropList"
             },
@@ -267,12 +281,12 @@
             },
             "value_maps": {
                 "phase": {
-                    "0": "PHASE_0",
-                    "1": "PHASE_1",
-                    "2": "PHASE_2",
-                    "PHASE_0": "PHASE_0",
-                    "PHASE_1": "PHASE_1",
-                    "PHASE_2": "PHASE_2"
+                    "0": "精英化0",
+                    "1": "精英化1",
+                    "2": "精英化2",
+                    "PHASE_0": "精英化0",
+                    "PHASE_1": "精英化1",
+                    "PHASE_2": "精英化2"
                 }
             }
         },

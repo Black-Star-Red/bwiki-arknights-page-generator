@@ -26,6 +26,7 @@ arknights_toolbox.egg-info
 
 # 测试拉取的 B 站 API 快照（本地查看用）
 test/output/
+.pytest_cache/
 
 # 日志与运行时
 arknights_toolbox/log/

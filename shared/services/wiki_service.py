@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import time
 from typing import Any
 
 
@@ -76,25 +77,57 @@ def upload_operator_portrait_if_enabled(
     operator_id: str,
     operator_name: str,
     headers: dict,
+    retries: int = 3,
+    timeout: float = 30,
 ) -> None:
-    """Fetch and upload operator portrait when enabled."""
+    """Fetch and upload operator portrait when enabled.
+
+    CDN/SSL 失败时跳过半身像，不中断干员后续流程（合同/信物等）。
+    """
     operator_id = (operator_id or "").strip()
     if not operator_id:
         print(f"干员{operator_name}半身像,跳过（无 charId，无法拼接 CDN 地址）")
         return
     if not enabled:
         return
-    portrait_resp = requests_module.get(
-        f"https://web.hycdn.cn/arknights/game/assets/char/portrait/{operator_id}.png",
-        headers=headers,
-    )
+
+    url = f"https://web.hycdn.cn/arknights/game/assets/char/portrait/{operator_id}.png"
+    request_exc = getattr(requests_module, "RequestException", Exception)
+    portrait_resp = None
+    last_err: BaseException | None = None
+    attempts = max(1, int(retries))
+    for attempt in range(1, attempts + 1):
+        try:
+            portrait_resp = requests_module.get(url, headers=headers, timeout=timeout)
+            last_err = None
+            break
+        except request_exc as e:
+            last_err = e
+            print(
+                f"干员{operator_name}半身像,下载异常 "
+                f"(charId={operator_id} attempt={attempt}/{attempts}): "
+                f"{type(e).__name__}: {e}"
+            )
+            if attempt < attempts:
+                time.sleep(min(2 * attempt, 6))
+
+    if last_err is not None or portrait_resp is None:
+        print(f"干员{operator_name}半身像,跳过（CDN 下载失败，继续后续步骤）")
+        return
+
     if portrait_resp.status_code == 200:
-        site_obj = get_site_fn()
-        if site_obj is not None:
-            file_obj = io.BytesIO(portrait_resp.content)
-            upload_fn(site_obj, file_obj, f"{operator_name}06.png")
-        else:
-            print("site创建失败")
+        try:
+            site_obj = get_site_fn()
+            if site_obj is not None:
+                file_obj = io.BytesIO(portrait_resp.content)
+                upload_fn(site_obj, file_obj, f"{operator_name}06.png")
+            else:
+                print("site创建失败")
+        except Exception as e:
+            print(
+                f"干员{operator_name}半身像,上传异常 "
+                f"(charId={operator_id}): {type(e).__name__}: {e}"
+            )
     else:
         print(
             f"干员{operator_name}半身像,获取失败 "

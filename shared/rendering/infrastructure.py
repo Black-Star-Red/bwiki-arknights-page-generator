@@ -5,11 +5,10 @@ from __future__ import annotations
 from data.mapper_helpers import bind_buff, bind_building_char, bind_buff_data_slot
 from shared.globals import INFRASTRUCTURE_ROOM, INFRASTRUCTURE_SKILL_SUFFIX
 from shared.rendering.description_parser import process_description
-from shared.utils import PHASE
 
 
 def _normalize_infra_phase(mapper, raw_phase):
-    """应用 building_data.value_maps.phase（如 yuanyan 的 0 → PHASE_0）。"""
+    """应用 building_data.value_maps.phase（如 0 / PHASE_0 → 精英化0）。"""
     if raw_phase is None:
         return None
     return mapper._apply_value_map("building_data", "phase", raw_phase)
@@ -62,9 +61,9 @@ def render_operator_infrastructure_fields(
                 mapper.get_data_safe("building_data", "buff_cond_phase"),
             )
             infrastructure_skill_condition = (
-                f"{PHASE(infrastructure_skill_phase)}"
+                f"{infrastructure_skill_phase}"
                 + (f"、{infrastructure_skill_level}级" if (infrastructure_skill_level is not None and infrastructure_skill_level > 1) else "")
-            ) if ((infrastructure_skill_level is not None and infrastructure_skill_level > 1) or infrastructure_skill_phase != "PHASE_0") else "初始携带"
+            ) if ((infrastructure_skill_level is not None and infrastructure_skill_level > 1) or infrastructure_skill_phase != "精英化0") else "初始携带"
 
             # Wiki 模板：id1–id6 = 技能槽1 三档(1–3) + 技能槽2 三档(4–6)
             infra_flat_index = (i - 1) * 3 + j

@@ -9,9 +9,6 @@ from data.mapper_helpers import (
     bind_skill_list_index,
     bind_skill_table_id,
 )
-from shared.utils import PHASE
-
-
 def _phase_attr_data(mapper, phase_index: int, keyframe_index: int) -> dict:
     bind_phase_index(mapper, phase_index)
     bind_keyframe_index(mapper, keyframe_index)
@@ -38,7 +35,7 @@ def Material(mapper, character_id, star, phase):
             count = cost.get("count")
             bind_item(mapper, item_id)
             item_name = mapper.get_data_safe(
-                "item_table", "item_name_by_id", default=item_id if item_id is not None else ""
+                "item_table", "item_name", default=item_id if item_id is not None else ""
             )
             result += f"{{{{data|{item_name}|{count}}}}}"
     elif int(star) == 5:
@@ -48,7 +45,7 @@ def Material(mapper, character_id, star, phase):
             count = cost.get("count")
             bind_item(mapper, item_id)
             item_name = mapper.get_data_safe(
-                "item_table", "item_name_by_id", default=item_id if item_id is not None else ""
+                "item_table", "item_name", default=item_id if item_id is not None else ""
             )
             result += f"{{{{data|{item_name}|{count}}}}}"
     elif int(star) == 4:
@@ -58,7 +55,7 @@ def Material(mapper, character_id, star, phase):
             count = cost.get("count")
             bind_item(mapper, item_id)
             item_name = mapper.get_data_safe(
-                "item_table", "item_name_by_id", default=item_id if item_id is not None else ""
+                "item_table", "item_name", default=item_id if item_id is not None else ""
             )
             result += f"{{{{data|{item_name}|{count}}}}}"
     elif int(star) == 3:
@@ -143,7 +140,9 @@ def LevelUPEnhance(mapper, star, phase):
         for candidate in trait["candidates"]:
             unlock_condition = candidate.get("unlockCondition", {})
             phase_condition = unlock_condition.get("phase")
-            if phase_condition and PHASE(phase_condition) == f"精英化{phase}":
+            phase_code = mapper._apply_value_map("character_table", "phase", phase_condition)
+            phase_label = mapper._apply_value_map("character_table", "phase_label", phase_code)
+            if phase_condition is not None and phase_label == f"精英化{phase}":
                 content += "<br/>{{color|00b0ff|特性}}更新"
                 break
 

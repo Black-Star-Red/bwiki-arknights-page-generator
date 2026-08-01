@@ -15,6 +15,7 @@ from pathlib import Path
 from data import load_config
 from core.character_script import run_character_pipeline
 from shared.services import ActivityRecord, list_activities_for_ui
+from gui.settings import SettingsDialog
 from PySide6.QtGui import QAction
 from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
 from PySide6.QtWidgets import (
@@ -357,7 +358,13 @@ class ArknightsToolWindow(QMainWindow):
         setting_menu = self.menuBar().addMenu("文件")
         setting_menu.addAction(QAction("设置", self, triggered=self._open_settings))
     def _open_settings(self) -> None:
-        QMessageBox.information(self, "提示", "设置功能暂未实现")
+        cfg = self.edit_config.text().strip()
+        if not cfg or not os.path.isfile(cfg):
+            QMessageBox.warning(self, "提示", "请先选择有效的 config.json 路径。")
+            return
+        dlg = SettingsDialog(cfg, self)
+        if dlg.exec():
+            self._reload_data_sources()
     def _reload_data_sources(self) -> None:
         prev = self.combo_source.currentText().strip()
         self.combo_source.blockSignals(True)
@@ -600,7 +607,7 @@ class ArknightsToolWindow(QMainWindow):
 
 
 def main() -> None:
-    # 干员脚本会按「含 arknights_toolbox/log 的目录」解析工程根；B 站配图写入 arknights_toolbox/photo/。
+    # 干员脚本会按「含 arknights_toolbox/log 的目录」解析工程根；B 站干员配图写入 arknights_toolbox/photo/。
     # GUI 若从 IDE/快捷方式启动 cwd 不一致时，这里切到包目录，避免日志与路径解析跑偏。
     try:
         os.chdir(_project_root())

@@ -186,7 +186,7 @@ def _append_name(
         if not part or part in "*#＊":
             continue
         if len(part) == 1 and warn is not None:
-            warn("ocr_drawer_single_char_name name=%s", part)
+            warn("ocr_drawer_single_char_name 单字画师名识别失败: %s", part)
         names.append(part)
 
 
@@ -242,7 +242,7 @@ def _collect_names_after_label(
                 )
                 taken += 1
             elif warn is not None:
-                warn("ocr_drawer_after_fragment_rejected line=%s", ln)
+                warn("ocr_drawer_after_fragment_rejected 画师名识别失败: %s", ln)
             j += 1
             break
         if not _looks_like_artist_name_line(raw, allow_single_char=allow_single_char_name):
@@ -266,13 +266,13 @@ def _collect_names_after_label(
                 continue
             if _looks_like_artist_name_line(raw, allow_single_char=True):
                 if warn is not None:
-                    warn("ocr_drawer_fallback_single_char line=%s", ln)
+                    warn("ocr_drawer_fallback_single_char 单字画师名识别失败: %s", ln)
                 _append_name(names, raw, allow_single_char=True, warn=warn)
                 if names:
                     break
 
     if not names and saw_fragment and warn is not None:
-        warn("ocr_drawer_label_fragment_no_name after_label_line=%s", start - 1)
+        warn("ocr_drawer_label_fragment_no_name 标签碎片后无画师名: %s", start - 1)
 
     return names, j
 
@@ -291,7 +291,7 @@ def _collect_one_drawer_name_after_anchor(
     if not _looks_like_artist_name_line(raw, allow_single_char=False):
         if warn is not None:
             warn(
-                "ocr_drawer_after_fragment_rejected line=%s",
+                "ocr_drawer_after_fragment_rejected 画师名识别失败: %s",
                 _clean_ocr_name_line(raw),
             )
         return []

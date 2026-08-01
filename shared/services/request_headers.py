@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 def build_bilibili_headers(cookies: str, *, mid: str | None = None) -> dict[str, str]:
-    """Build headers for bilibili API calls."""
+    """构建 B 站 API 请求头"""
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "application/json, text/plain, */*",

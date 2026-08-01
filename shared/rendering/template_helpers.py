@@ -32,7 +32,7 @@ def render_skill_materials(mapper, all_skill_lvlup, level):
         for cost in costs:
             iid = cost.get("id")
             bind_item(mapper, iid)
-            nm = mapper.get_data_safe("item_table", "item_name_by_id", default=iid if iid is not None else "未知物品")
+            nm = mapper.get_data_safe("item_table", "item_name", default=iid if iid is not None else "未知物品")
             parts_m.append(f"{{{{data|{nm}|{cost.get('count', '')}}}}}")
         materials = "".join(parts_m)
     else:
@@ -69,17 +69,19 @@ def resolve_drawer_with_fallback(
     char_id: str,
     *,
     db_drawer: str | None = None,
-) -> str:
+) -> tuple[str, str]:
     """
     画师解析顺序：
     1. 当前数据源 skin_table
     2. 其它数据源组 skin_table
     3. 补充库 / OCR 写入的「画师」字段（db_drawer）
     """
-    if id !="":
+    source="db"
+    if char_id !="":
         drawer = build_drawer_from_skins(mapper, char_id)
         if drawer.strip():
-            return drawer
+            source = "skin_table "
+            return drawer, source
         other_keys = [
             k for k in mapper.config["data_sources"].keys() if k != mapper.current_data_sources
         ]
@@ -87,8 +89,9 @@ def resolve_drawer_with_fallback(
             with mapper.temporary_source_group(alt):
                 drawer = build_drawer_from_skins(mapper, char_id)
                 if drawer.strip():
-                    return drawer
-    return (db_drawer or "").strip()
+                    source = "skin_table "
+                    return drawer, source
+    return (db_drawer or "").strip(), source
 
 
 def _skin_entry_char_id(skin_key: str, skin_value: dict) -> str:

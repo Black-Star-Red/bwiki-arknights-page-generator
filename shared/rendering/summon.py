@@ -12,7 +12,6 @@ from data.mapper_helpers import (
 )
 from shared.globals import POTENTIAL_SUFFIX
 from shared.rendering.description_parser import process_description
-from shared.utils import PHASE
 
 def _collect_token_keys(raw_value) -> list[str]:
     keys: list[str] = []
@@ -182,8 +181,9 @@ def render_summon_template_lines(
                 unlock_condition = talents_candidates[j - 1].get("unlockCondition", {}) if j > 0 else talents_candidates[j].get("unlockCondition", {})
                 phase = mapper._apply_value_map("character_table", "phase", unlock_condition.get("phase"))
                 required_potential_rank = talents_candidates[j].get("requiredPotentialRank", 0)
+                phase_label = mapper._apply_value_map("character_table", "phase_label", phase)
                 talent_condition = (
-                    PHASE(phase) + POTENTIAL_SUFFIX[str(required_potential_rank)]
+                    str(phase_label) + POTENTIAL_SUFFIX[str(required_potential_rank)]
                     if (phase != "PHASE_0" or required_potential_rank != 0)
                     else "初始携带"
                 )
@@ -233,7 +233,11 @@ def render_summon_template_lines(
         skill_row = op_skills[i - 1] if isinstance(op_skills, list) and len(op_skills) >= i else {}
         unlock = (skill_row or {}).get("unlockCond") or (skill_row or {}).get("unlockCondition") or {}
         unlock_phase = mapper._apply_value_map("character_table", "phase", unlock.get("phase"))
-        unlock_label = PHASE(unlock_phase) if unlock_phase else ""
+        unlock_label = (
+            str(mapper._apply_value_map("character_table", "phase_label", unlock_phase))
+            if unlock_phase
+            else ""
+        )
         lines.append(f"|技能{id_number}={summon_skill_name}")
         lines.append(f"|技能{id_number}产生={summon_skill_name}")
         lines.append(f"|技能{id_number}解锁条件={unlock_label}")

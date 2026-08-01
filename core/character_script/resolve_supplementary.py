@@ -462,10 +462,6 @@ def resolve_supplementary_data(
 
     )
 
-
-
-
-
 def _resolve_for_names(
 
     mapper,

@@ -108,9 +108,9 @@ def load_config(
     """解析路径 → 读主配置 → 合并 *.local → 应用环境变量。"""
     base_path = resolve_config_path(config_path, search_dirs=search_dirs)
     config = _load_with_includes(base_path)
-    local_path = base_path.with_name(f"{base_path.stem}.local{base_path.suffix}")
+    local_path = local_config_path(base_path)
     if local_path.is_file():
-        local = _load_with_includes(local_path) 
+        local = _load_with_includes(local_path)
         config = _deep_merge(config, local)
 
     env_cookies = os.getenv("ARK_TOOL_COOKIES")
@@ -120,9 +120,52 @@ def load_config(
     return config
 
 
+def local_config_path(config_path: str | Path, *, search_dirs: Sequence[Path] | None = None) -> Path:
+    """主 config.json → 同目录 config.local.json（不要求 local 已存在）。"""
+    base = Path(config_path)
+    if not base.is_file():
+        base = resolve_config_path(config_path, search_dirs=search_dirs)
+    else:
+        base = base.resolve()
+    return base.with_name(f"{base.stem}.local{base.suffix}")
+
+
+def read_local_config(
+    config_path: str | Path,
+    *,
+    search_dirs: Sequence[Path] | None = None,
+) -> dict:
+    """只读 *.local.json；不存在则返回空 dict。"""
+    path = local_config_path(config_path, search_dirs=search_dirs)
+    if not path.is_file():
+        return {}
+    return read_config_file(path) or {}
+
+
+def save_local_patch(
+    config_path: str | Path,
+    patch: dict,
+    *,
+    search_dirs: Sequence[Path] | None = None,
+) -> Path:
+    """深合并 patch 进 *.local.json 并写回；保留 database 等未改字段。"""
+    path = local_config_path(config_path, search_dirs=search_dirs)
+    existing = read_local_config(config_path, search_dirs=search_dirs)
+    merged = _deep_merge(existing, patch)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(merged, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 __all__ = [
     "default_config_search_dirs",
     "resolve_config_path",
     "read_config_file",
     "load_config",
+    "local_config_path",
+    "read_local_config",
+    "save_local_patch",
 ]

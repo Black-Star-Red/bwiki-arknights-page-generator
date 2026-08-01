@@ -1,6 +1,12 @@
 """Data layer exports."""
 
-from .config_loader import load_config, resolve_config_path
+from .config_loader import (
+    load_config,
+    local_config_path,
+    read_local_config,
+    resolve_config_path,
+    save_local_patch,
+)
 from .mapper import DataMapper
 from .mapper_helpers import (
     bind_buff,
@@ -41,7 +47,10 @@ __all__ = [
     "bind_talent_candidate",
     "bind_talent_group",
     "load_config",
+    "local_config_path",
+    "read_local_config",
     "resolve_config_path",
+    "save_local_patch",
     "DataSource",
     "JsonDataSource",
     "ApiDataSource",

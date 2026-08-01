@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from shared.rendering.description_parser import process_description
-from shared.utils import PHASE
 from shared.globals import POTENTIAL_SUFFIX
 
 def render_operator_talent_fields(
@@ -32,7 +31,7 @@ def render_operator_talent_fields(
                 phase = mapper.get_data_safe("character_table", "talent_phase", default="PHASE_0")
                 phase = mapper._apply_value_map("character_table", "phase", phase)
                 required_potential = mapper.get_data_safe("character_table", "talent_required_potential", default=0)
-                phase_text = str(PHASE(phase))
+                phase_text = str(mapper._apply_value_map("character_table", "phase_label", phase))
                 talent_condition = (
                     phase_text + POTENTIAL_SUFFIX.get(str(required_potential), "")
                     if (phase != "PHASE_0" or required_potential != 0)
