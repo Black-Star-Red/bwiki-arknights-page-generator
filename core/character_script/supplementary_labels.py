@@ -77,7 +77,7 @@ def build_corner_labels(
     根据 B 站补充 dict 生成 |角标= 列表项。
 
     联动：角标「联」；活动奖励干员再加「活」，主题曲活动再加「主」，异格再加「异」。
-    非联动：限定 / 活 / 主 / 异 等原有规则。
+    非联动：限 / 活 / 主 / 异 等原有规则。
     """
     obtain = str(value.get("获取途径") or "")
     if is_collaboration(value):
@@ -98,7 +98,7 @@ def build_corner_labels(
     if alter_operator:
         label.append("异")
     if value.get("动态id"):
-        label.insert(0, "限定")
+        label.insert(0, "限")
     return label
 
 
