@@ -37,9 +37,6 @@ config/cache/
 # IDE
 .idea/
 
-# 图片数据
-photo/
-
 #解包/缓存的游戏数据时很大
 # zh_CN/gamedata/
 # *.pkl
