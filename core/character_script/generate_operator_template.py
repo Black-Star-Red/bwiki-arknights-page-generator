@@ -503,7 +503,7 @@ def generate_template(
             parts.append("|罕见=")
             parts.append("|额外物资=")
             parts.append("|基建生产=")
-            parts.append(f"|稀有度={mapper.get_data_safe('character_table', 'rarity') or ''}")
+            parts.append(f"|稀有度={mapper.get_data_safe('character_table', 'material_rarity') or ''}")
             parts.append("|备注=")
             parts.append("}}")
             ContractAndToken_enabled = wiki_yes_no(
@@ -517,7 +517,7 @@ def generate_template(
                 enabled=ContractAndToken_enabled,
                 get_site_fn=get_site,
                 create_site_page_fn=create_site_page,
-                page_name=f"{name}的招聘合同",
+                page_name=f"{name}招聘合同",
                 page_content="\n".join(parts),
                 wiki_use_test_page=wiki_use_test_page,
                 offline_message="Wiki未连接，跳过创建招聘合同页面",

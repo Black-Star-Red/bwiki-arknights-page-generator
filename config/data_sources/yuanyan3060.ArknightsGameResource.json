@@ -17,6 +17,7 @@
             "description": "{currentCharId}.description",
             "profession": "{currentCharId}.profession",
             "rarity": "{currentCharId}.rarity+1",
+            "material_rarity": "{currentCharId}.rarity",
             "mainPower": "{currentCharId}.mainPower",
             "subPower": "{currentCharId}.subPower",
             "position": "{currentCharId}.position",
