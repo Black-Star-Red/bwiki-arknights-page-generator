@@ -17,6 +17,7 @@
             "description": "{currentCharId}.description",
             "profession": "{currentCharId}.profession",
             "rarity": "{currentCharId}.rarity[-1:]",
+            "material_rarity": "{currentCharId}.rarity",
             "mainPower": "{currentCharId}.mainPower",
             "subPower": "{currentCharId}.subPower",
             "position": "{currentCharId}.position",
@@ -118,6 +119,14 @@
                     "SUPPORT": "辅助",
                     "TANK": "重装",
                     "WARRIOR": "近卫"
+                },
+                "material_rarity": {
+                    "TIER_1": "0",
+                    "TIER_2": "1",
+                    "TIER_3": "2",
+                    "TIER_4": "3",
+                    "TIER_5": "4",
+                    "TIER_6": "5"
                 }
             },
             "field_meta": {
