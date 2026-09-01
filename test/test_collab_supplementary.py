@@ -27,6 +27,9 @@ apply_collab_period = _collab_shared.apply_collab_period_supplementary_meta
 build_corner_labels = _labels.build_corner_labels
 enrich_collab_meta = _collab_shared.enrich_collab_meta
 is_collaboration = _labels.is_collaboration
+is_collab_period_activity_reward_context = (
+    _collab_shared.is_collab_period_activity_reward_context
+)
 is_limited_dynamic = _labels.is_limited_dynamic
 _dynamic_is_collaboration = _bili._dynamic_is_collaboration
 
@@ -123,6 +126,35 @@ def test_apply_collab_period_marks_activity_reward_with_gui_name():
     assert build_corner_labels(out) == ["联", "活"]
 
 
+def test_collab_period_activity_reward_without_gui_when_feed_has_collab_pools():
+    """按数量批量、未选手动活动时，feed 已缓存联动池 → 活动奖励判联。"""
+    ctx = _bili.BilibiliScanContext(
+        cached_activity_name="月行水上",
+        cached_side_story="SideStory「月行水上」",
+        cached_collab_gacha_pools={"石白深蓝之夜"},
+    )
+    assert is_collab_period_activity_reward_context(
+        ctx,
+        gui_activity="",
+        pools_at_or_before={"石白深蓝之夜"},
+    )
+    out = apply_collab_period(
+        {"获取途径": "活动获取、【月行水上】活动获取"},
+        ctx,
+    )
+    assert out["联动"] is True
+    assert build_corner_labels(out) == ["联", "活"]
+
+
+def test_collab_period_activity_reward_without_gui_requires_collab_signal():
+    ctx = _bili.BilibiliScanContext(cached_activity_name="普通SideStory")
+    assert not is_collab_period_activity_reward_context(
+        ctx,
+        gui_activity="",
+        pools_at_or_before=set(),
+    )
+
+
 def test_apply_collab_period_meta_for_db_standard_gacha():
     ctx = _bili.BilibiliScanContext(
         gui_activity_name="泡影苍霆",
@@ -152,15 +184,33 @@ def test_build_corner_labels_collab():
     assert not is_limited_dynamic(value)
 
 
-def test_wiki_obtain_path_keeps_activity_reward_with_collab_pool():
+def test_wiki_obtain_path_collab_activity_reward():
     wiki = _labels.wiki_obtain_path
     value = {
         "联动": True,
         "联动卡池": "幽境狩人",
         "获取途径": "活动获取、【泡影苍霆】活动获取",
     }
-    assert wiki(value) == "活动获取、【泡影苍霆】活动获取"
-    assert _labels.collab_obtain_path(value) is None
+    assert wiki(value) == "【泡影苍霆】活动获取、活动获取、联动"
+    assert _labels.collab_obtain_path(value) == "【泡影苍霆】活动获取、活动获取、联动"
+
+
+def test_wiki_obtain_path_collab_activity_reward_yuexingshuishang():
+    wiki = _labels.wiki_obtain_path
+    value = {
+        "联动": True,
+        "获取途径": "活动获取、【月行水上】活动获取",
+    }
+    assert wiki(value) == "【月行水上】活动获取、活动获取、联动"
+
+
+def test_wiki_obtain_path_normalizes_legacy_collab_gacha():
+    wiki = _labels.wiki_obtain_path
+    value = {
+        "联动": True,
+        "获取途径": "联动寻访、【幽境狩人】寻访",
+    }
+    assert wiki(value) == "联动、联动寻访、【幽境狩人】寻访"
 
 
 def test_wiki_obtain_path_uses_collab_pool_for_standard_gacha():

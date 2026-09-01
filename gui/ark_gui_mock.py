@@ -7,14 +7,16 @@ Arknights 数据工具 — PySide6 界面（配置路径、数据源、Wiki 选�
 """
 from __future__ import annotations
 
+import io
 import os
 import sys
 import threading
 import traceback
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from data import load_config
 from core.character_script import run_character_pipeline
-from shared.services import ActivityRecord, list_activities_for_ui
+from shared.services import ActivityRecord, list_activities_for_ui, refresh_wiki_aggregate_pages
 from gui.settings import SettingsDialog
 from PySide6.QtGui import QAction
 from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
@@ -121,6 +123,26 @@ class WikiConfirmBridge(QObject):
         return bool(self._last_answer)
 
 
+class WikiPurgeThread(QThread):
+    """后台刷新 Wiki 聚合页缓存（shared.services.wiki_purge）。"""
+
+    succeeded = Signal(str)
+    failed = Signal(str)
+
+    def run(self) -> None:
+        try:
+            buf = io.StringIO()
+            with redirect_stdout(buf), redirect_stderr(buf):
+                code = int(refresh_wiki_aggregate_pages())
+            text = buf.getvalue().strip() or "(无输出)"
+            if code != 0:
+                self.failed.emit(text)
+            else:
+                self.succeeded.emit(text)
+        except BaseException as e:
+            self.failed.emit(f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
+
+
 class OperatorRunThread(QThread):
     """在子线程中加载并执行干员脚本，避免阻塞 Qt 事件循环。"""
 
@@ -209,6 +231,7 @@ class ArknightsToolWindow(QMainWindow):
         self.setCentralWidget(central)
 
         self._run_thread: OperatorRunThread | None = None
+        self._purge_thread: WikiPurgeThread | None = None
         self._wiki_bridge = WikiConfirmBridge(self)
         self._activity_records: list[ActivityRecord] = []
 
@@ -313,9 +336,15 @@ class ArknightsToolWindow(QMainWindow):
         btn_all.clicked.connect(self._wiki_select_all)
         btn_none = QPushButton("Wiki 清空")
         btn_none.clicked.connect(self._wiki_select_none)
+        self.btn_flash_wiki = QPushButton("刷新首页与干员一览")
+        self.btn_flash_wiki.setToolTip(
+            "purge + parse：首页、干员一览、各职业图鉴（shared.services.wiki_purge）"
+        )
+        self.btn_flash_wiki.clicked.connect(self._flash_wiki)
         row_wiki_btns = QHBoxLayout()
         row_wiki_btns.addWidget(btn_all)
         row_wiki_btns.addWidget(btn_none)
+        row_wiki_btns.addWidget(self.btn_flash_wiki)
         row_wiki_btns.addStretch(1)
         wiki_grid.addLayout(row_wiki_btns, 3, 0, 1, 2)
 
@@ -485,6 +514,54 @@ class ArknightsToolWindow(QMainWindow):
         self.chk_wiki_voice.setChecked(False)
         self.chk_wiki_portrait.setChecked(False)
         self.chk_wiki_ContractAndToken.setChecked(False)
+    def _flash_wiki(self) -> None:
+        if self._run_thread is not None and self._run_thread.isRunning():
+            QMessageBox.information(self, "提示", "干员生成任务进行中，请稍候。")
+            return
+        if self._purge_thread is not None and self._purge_thread.isRunning():
+            QMessageBox.information(self, "提示", "缓存刷新已在进行中。")
+            return
+        ok = (
+            QMessageBox.question(
+                self,
+                "确认刷新",
+                "将对首页、干员一览及各职业图鉴执行 purge + 重解析。\n"
+                "可能需要一两分钟，并可能触发站点限流。\n\n是否继续？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            == QMessageBox.StandardButton.Yes
+        )
+        if not ok:
+            return
+        self._show_result_text(
+            "—— 正在刷新 Wiki 聚合页缓存 ——\n（首页 / 干员一览 / 职业图鉴）\n",
+            fallback_tab_title="缓存刷新",
+        )
+        self.btn_run.setEnabled(False)
+        self.btn_flash_wiki.setEnabled(False)
+        self._purge_thread = WikiPurgeThread()
+        self._purge_thread.succeeded.connect(self._on_purge_succeeded)
+        self._purge_thread.failed.connect(self._on_purge_failed)
+        self._purge_thread.finished.connect(self._on_purge_thread_finished)
+        self._purge_thread.start()
+
+    def _on_purge_succeeded(self, text: str) -> None:
+        self._show_result_text(text or "", fallback_tab_title="缓存刷新")
+        QMessageBox.information(self, "完成", "Wiki 聚合页缓存刷新完成。")
+
+    def _on_purge_failed(self, err: str) -> None:
+        self._show_result_text("—— 缓存刷新失败 / 有失败页 ——\n\n" + err, fallback_tab_title="缓存刷新")
+        QMessageBox.warning(
+            self,
+            "刷新未全部成功",
+            (err[:800] + ("…" if len(err) > 800 else "")) or "详见结果页",
+        )
+
+    def _on_purge_thread_finished(self) -> None:
+        self.btn_run.setEnabled(True)
+        self.btn_flash_wiki.setEnabled(True)
+        self._purge_thread = None
+
     def _sync_wiki_publish_ui(self,enabled:bool) -> None:
         for w in self._wiki_action_checks:
             w.setEnabled(enabled)
@@ -505,6 +582,9 @@ class ArknightsToolWindow(QMainWindow):
             return
         if self._run_thread is not None and self._run_thread.isRunning():
             QMessageBox.information(self, "提示", "已有任务在运行，请稍候。")
+            return
+        if self._purge_thread is not None and self._purge_thread.isRunning():
+            QMessageBox.information(self, "提示", "缓存刷新进行中，请稍候。")
             return
 
         src = self.combo_source.currentText()
@@ -561,6 +641,7 @@ class ArknightsToolWindow(QMainWindow):
             fallback_tab_title="运行状态",
         )
         self.btn_run.setEnabled(False)
+        self.btn_flash_wiki.setEnabled(False)
 
         self._run_thread = OperatorRunThread(
             config_path=cfg,
@@ -603,6 +684,7 @@ class ArknightsToolWindow(QMainWindow):
 
     def _on_run_thread_finished(self) -> None:
         self.btn_run.setEnabled(True)
+        self.btn_flash_wiki.setEnabled(True)
         self._run_thread = None
 
 

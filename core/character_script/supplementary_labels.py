@@ -53,13 +53,13 @@ def _is_main_theme_obtain(obtain: str) -> bool:
 
 
 def collab_obtain_path(value: dict[str, Any]) -> str | None:
-    """联动寻访类 |获取途径= 文案（活动/主题曲奖励类不覆盖）。"""
-    obtain = str(value.get("获取途径") or "").strip()
-    if _is_activity_reward_obtain(obtain) or _is_main_theme_obtain(obtain):
+    """联动干员 |获取途径= 文案（与 wiki_obtain_path 一致，非联动返回 None）。"""
+    if not is_collaboration(value):
         return None
-    pool = collab_pool_name(value)
-    if pool:
-        return f"联动、联动寻访、【{pool}】寻访"
+    obtain = str(value.get("获取途径") or "").strip()
+    wiki = _wiki_obtain_path(value)
+    if wiki != obtain or collab_pool_name(value) or is_collab_activity_reward_obtain(wiki):
+        return wiki
     return None
 
 

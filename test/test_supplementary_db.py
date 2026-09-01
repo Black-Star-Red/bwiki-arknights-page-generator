@@ -191,7 +191,7 @@ def test_supplementary_for_upsert_matches_wiki_obtain(sqlite_config):
             "联动卡池": "幽境狩人",
         }
     )
-    assert activity["获取途径"] == "活动获取、【泡影苍霆】活动获取"
+    assert activity["获取途径"] == "【泡影苍霆】活动获取、活动获取、联动"
     gacha = supplementary_for_upsert(
         {
             "获取途径": "标准寻访",

@@ -28,6 +28,10 @@ from .wiki_service import (
     upload_site_file_with_retry,
     write_site_page,
 )
+from .wiki_purge import (
+    DEFAULT_PAGES as WIKI_PURGE_DEFAULT_PAGES,
+    refresh_wiki_aggregate_pages
+)
 
 if TYPE_CHECKING:
     from .ocr_service import ocr_exec, ocr_operator_profile
@@ -51,6 +55,8 @@ __all__ = [
     "ocr_operator_profile",
     "upload_operator_portrait_if_enabled",
     "resolve_hypergryph_settings",
+    "WIKI_PURGE_DEFAULT_PAGES",
+    "refresh_wiki_aggregate_pages",
 ]
 
 

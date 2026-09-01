@@ -1,6 +1,6 @@
 """GUI entrypoint in new package layout."""
 
-from __future__ import annotations
+from __future__ import annotations # 用于类型提示
 import sys
 from pathlib import Path
 root = Path(__file__).resolve().parents[1] # 获取项目根目录F:\项目\arknights_toolbox

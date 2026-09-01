@@ -10,6 +10,7 @@ _COLLAB_OBTAIN_LEGACY_RE = re.compile(r"^联动寻访、【([^】]+)】寻访")
 _COLLAB_ACTIVITY_REWARD_RE = re.compile(
     r"^【([^】]+)】活动获取、活动获取、联动$"
 )
+_ACTIVITY_REWARD_SHORT_RE = re.compile(r"^活动获取、【([^】]+)】活动获取$")
 _NAMED_GACHA_POOL_SKIP = frozenset({
     "新增干员",
     "活动奖励干员",
@@ -58,6 +59,36 @@ def is_collab_activity_reward_obtain(obtain: str) -> bool:
     return bool(_COLLAB_ACTIVITY_REWARD_RE.match(text))
 
 
+def is_collab_period_activity_reward_context(
+    scan_ctx: Any | None,
+    *,
+    gui_activity: str = "",
+    pools_at_or_before: set[str] | None = None,
+    is_main_theme_gui: bool = False,
+) -> bool:
+    """
+    活动奖励干员是否处于联动活动窗。
+
+    - GUI 已选活动：沿用原规则（联动池缓存 / 活动名与 feed 对齐）。
+    - 未选 GUI 活动：feed 预填已识别联动限时池（如按数量批量扫描）时也视为联动期。
+    """
+    if scan_ctx is None or is_main_theme_gui:
+        return False
+    cached_pools = set(getattr(scan_ctx, "cached_collab_gacha_pools", None) or ())
+    timeline_pools = set(pools_at_or_before or ())
+    has_collab_signal = bool(cached_pools or timeline_pools)
+    gui = (gui_activity or "").strip()
+    if gui:
+        cached_name = (getattr(scan_ctx, "cached_activity_name", None) or "").strip()
+        cached_ss = str(getattr(scan_ctx, "cached_side_story", None) or "")
+        return (
+            has_collab_signal
+            or cached_name == gui
+            or gui in cached_ss
+        )
+    return has_collab_signal
+
+
 def collab_pool_from_obtain(obtain: str) -> str | None:
     text = (obtain or "").strip()
     for pat in (_COLLAB_OBTAIN_RE, _COLLAB_OBTAIN_LEGACY_RE):
@@ -72,15 +103,43 @@ def _is_activity_or_theme_obtain(obtain: str) -> bool:
     return "活动获取" in text or "活动获得" in text or "主题曲" in text
 
 
+def _wiki_collab_activity_reward_obtain(obtain: str) -> str | None:
+    """联动活动奖励：【活动名】活动获取、活动获取、联动。"""
+    text = (obtain or "").strip()
+    if is_collab_activity_reward_obtain(text):
+        return text
+    m = _ACTIVITY_REWARD_SHORT_RE.match(text)
+    if m:
+        return f"联动、活动获取、【{m.group(1)}】活动获取"
+    return None
+
+
+def _wiki_collab_gacha_obtain(value: dict[str, Any], obtain: str) -> str | None:
+    """联动卡池寻访：联动、联动寻访、【池名】寻访。"""
+    pool = collab_pool_from_obtain(obtain) or str(value.get("联动卡池") or "").strip()
+    if not pool:
+        return None
+    return f"联动、联动寻访、【{pool}】寻访"
+
+
 def wiki_obtain_path(value: dict[str, Any]) -> str:
-    """Wiki |获取途径= 与入库回填一致：活动/主题曲类保留原文，寻访类写联动池文案。"""
+    """Wiki |获取途径= 与入库回填一致；联动干员统一带「联动」文案。"""
     obtain = str(value.get("获取途径") or "").strip()
+    if value.get("联动") is True:
+        if "主题曲" in obtain:
+            return obtain
+        if "活动获取" in obtain or "活动获得" in obtain:
+            collab_activity = _wiki_collab_activity_reward_obtain(obtain)
+            if collab_activity:
+                return collab_activity
+        gacha = _wiki_collab_gacha_obtain(value, obtain)
+        if gacha:
+            return gacha
+
     if _is_activity_or_theme_obtain(obtain):
         return obtain
     pool = collab_pool_from_obtain(obtain) or str(value.get("联动卡池") or "").strip()
-    if pool and (
-        value.get("联动") is True or collab_pool_from_obtain(obtain) is not None
-    ):
+    if pool and collab_pool_from_obtain(obtain) is not None:
         return f"联动、联动寻访、【{pool}】寻访"
     return obtain
 
@@ -178,13 +237,19 @@ def apply_collab_period_supplementary_meta(
         getattr(scan_ctx, "gui_activity_is_main_theme", False)
     )
     # 活动奖励干员打「联」角标（与池无关）
-    if (
-        gui
-        and not is_main_theme_gui
-        and ("活动获取" in obtain or "活动获得" in obtain)
-        and (gui in obtain or is_collab_activity_reward_obtain(obtain))
-    ):
-        out["联动"] = True
+    cached_name = (getattr(scan_ctx, "cached_activity_name", None) or "").strip()
+    cached_collab = bool(getattr(scan_ctx, "cached_collab_gacha_pools", None))
+    is_activity_obtain = "活动获取" in obtain or "活动获得" in obtain
+    if not is_main_theme_gui and is_activity_obtain:
+        if gui and (gui in obtain or is_collab_activity_reward_obtain(obtain)):
+            out["联动"] = True
+        elif (
+            not gui
+            and cached_collab
+            and cached_name
+            and cached_name in obtain
+        ):
+            out["联动"] = True
     if not gui:
         return out
     cutoff = _collab_pool_cutoff_ts(out, scan_ctx)

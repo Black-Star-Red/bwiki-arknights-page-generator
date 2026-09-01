@@ -10,7 +10,8 @@ from datetime import datetime
 from typing import Any, Callable
 from shared.collab_supplementary import (
     collab_gacha_pools_at_or_before,
-    is_named_gacha_pool
+    is_collab_period_activity_reward_context,
+    is_named_gacha_pool,
 )
 import requests
 
@@ -239,13 +240,12 @@ def _build_character_from_hit(
     collab_period_activity_reward = bool(
         gacha_pool == "活动奖励干员"
         and not is_collab_dynamic
-        and gui_activity
         and scan_ctx is not None
-        and not scan_ctx.gui_activity_is_main_theme
-        and (
-            scan_ctx.cached_collab_gacha_pools
-            or (scan_ctx.cached_activity_name or "").strip() == gui_activity
-            or gui_activity in (scan_ctx.cached_side_story or "")
+        and is_collab_period_activity_reward_context(
+            scan_ctx,
+            gui_activity=gui_activity,
+            pools_at_or_before=pools,
+            is_main_theme_gui=bool(scan_ctx.gui_activity_is_main_theme),
         )
     )
     release_time = None
@@ -362,7 +362,7 @@ def _build_character_from_hit(
             "活动奖励干员",
             acquisition_method,
             side_story=hit.side_story,
-            collab=False,
+            collab=collab_period_activity_reward,
             activity_name=reward_activity,
         )
     elif collab_period_new_ops:
