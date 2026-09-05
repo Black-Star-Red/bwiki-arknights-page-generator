@@ -6,6 +6,56 @@ import re
 
 from data.mapper_helpers import bind_handbook_char
 
+# 仅登记需要特殊预处理的标题；纯【】测试 / 纯文本履历可走通用分支或 else
+_STORY_TITLE_ALIASES = {
+    "特殊疾病筛查": "临床诊断分析",
+}
+
+_BRACKET_FIELD_RE = re.compile(r"【([^】]+)】([^\n【]*)")
+
+# 整段正文：换行→<br/>，Wiki 键用 storyTitle（含履历类，按纯文本处理）
+_PLAIN_STORY_TITLES = frozenset(
+    {
+        "客观履历",
+        "学生概况",
+        "档案资料一",
+        "档案资料二",
+        "档案资料三",
+        "档案资料四",
+        "晋升记录",
+    }
+)
+
+# 【】表：标签原样输出（综合能力测试等未登记的走 else）
+_BRACKET_SHEET_TITLES = frozenset(
+    {
+        "综合体检测试",
+        "综合性能检测结果",
+    }
+)
+
+
+# 【基础档案】游戏标签 → Wiki 参数（生日/感染/经验另有特殊处理）
+_BASE_FIELD_TO_WIKI = (
+    ("性别", "性别"),
+    ("种族", "种族"),
+    ("出身地", "出身"),
+    ("产地", "产地"),
+    ("身高", "身高"),
+    ("高度", "高度"),
+    ("设定性别", "设定性别"),
+    ("重量", "重量"),
+    ("制造商", "制造商"),
+    ("出厂时间", "出厂时间"),
+    ("入学年级", "入学年级"),
+    ("维护检测报告", "维护检测报告"),
+    ("维护检测情况", "维护检测报告"),  # 后者仅在前者为空时补上
+)
+
+_DATE_BRACKET_RE = re.compile(r"【([^】]*)】(\d+)月(\d+)日")
+_EXPERIENCE_RE = re.compile(r"【(.*?)经验】(.+?)(?:\n|$)")
+
+
 def _wiki_text_field(v) -> str:
     """避免把 Python/JSON 的 None 写成字面量 ``None`` 进 Wiki。"""
     if v is None:
@@ -14,6 +64,50 @@ def _wiki_text_field(v) -> str:
     if s.lower() == "none":
         return ""
     return s
+
+
+def _canonical_story_title(title: str) -> str:
+    return _STORY_TITLE_ALIASES.get(title, title)
+
+
+def parse_bracket_fields(text: str) -> dict[str, str]:
+    """从档案正文扫描 ``【标签】值``（值到换行或下一个【为止）。"""
+    out: dict[str, str] = {}
+    for m in _BRACKET_FIELD_RE.finditer(text or ""):
+        key = m.group(1).strip()
+        val = m.group(2).strip()
+        if key:
+            out[key] = val
+    return out
+
+
+def _bracket_value_or_next_line(text: str, label: str, fields: dict[str, str]) -> str:
+    """同行值为空时，取【标签】下一行。"""
+    val = (fields.get(label) or "").strip()
+    if val:
+        return val
+    m = re.search(rf"【{re.escape(label)}】\s*\n(.+)", text or "")
+    return m.group(1).strip() if m else ""
+
+
+def _looks_like_bracket_sheet(title: str, fields: dict[str, str]) -> bool:
+    """新出的测试/检测类（如综合能力测试）未登记时，仍按【】表处理。"""
+    if not fields:
+        return False
+    if "测试" in title or "检测" in title:
+        return True
+    # 多组短值【】，避免把诊断长文里偶发的【】当成表
+    return len(fields) >= 3 and all(len(v) <= 20 for v in fields.values())
+
+
+def _apply_base_field_map(base_fields: dict[str, str]) -> dict[str, str]:
+    """把基础档案【】标签填进 Wiki 键；同目标键先到先得。"""
+    profile: dict[str, str] = {}
+    for src, dst in _BASE_FIELD_TO_WIKI:
+        val = (base_fields.get(src) or "").strip()
+        if val and not profile.get(dst):
+            profile[dst] = val
+    return profile
 
 
 def render_operator_dossier_fields(
@@ -29,208 +123,156 @@ def render_operator_dossier_fields(
 ):
     """干员档案模板"""
     lines: list[str] = []
-    (
-        birthday,
-        birthday2,
-        month,
-        day,
-        sex,
-        people,
-        birthplace,
-        height,
-        height2,
-        is_infection,
-        design_sex,
-        experience,
-        experience_name,
-        manufacturer,
-        birthplace2,
-        produce_time,
-        weight,
-        repair_report,
-        infection_status,
-        objective_eesume,
-        physic_intensity,
-        battlefield_flexible,
-        physiology_tolerance,
-        tactic_plan,
-        battle_technic,
-        source_stone_skill_adaptability,
-        diagnosis_analysis,
-        file_one,
-        file_two,
-        file_three,
-        file_four,
-        promotion_record,
-        promotion_archive,
-        maximum_speed,
-        hill_climbing_ability,
-        braking_efficiency,
-        pass_rate,
-        endurance,
-        structural_stability,
-    ) = ("" for _ in range(39))
+    # 基础档案 Wiki 字段（含特殊处理写入的生日/感染/经验等）
+    profile: dict[str, str] = {}
+    month = day = is_infection = ""
+    # 【】表：综合体检测试、综合性能检测结果，以及 else 中新出的测试/检测
+    bracket_fields: dict[str, str] = {}
+    # 整段正文：履历、档案资料、晋升/升变、诊断等（键用 storyTitle）
+    story_text_fields: dict[str, str] = {}
+
     bind_handbook_char(mapper, char_id)
     char_text = mapper.get_data_safe("handbook_info_table", "handbook_dict_entry") or {}
     for story_idx, story_text in enumerate(char_text.get("storyTextAudio") or []):
         mapper.add_mapping("handbook_info_table", "handbook_story_index", str(story_idx))
-        if story_text["storyTitle"] == "基础档案":
-            base_story = safe_get_fn(story_text, ["stories", 0, "storyText"]) or ""
-            if "【代号】" in base_story or "【姓名】" in base_story:
-                birthday_data = re.search(r"【([^】]*)】(\d+)月(\d+)日", base_story)
-                birthday = (f"{birthday_data.group(2)}月{birthday_data.group(3)}日") if birthday_data and birthday_data.group(1) == "生日" else ""
-                birthday2 = (f"{birthday_data.group(2)}月{birthday_data.group(3)}日") if birthday_data and birthday_data.group(1) == "出厂日" else ""
-                month = f"{birthday_data.group(2)}" if birthday_data else ""
-                day = f"{birthday_data.group(3)}" if birthday_data else ""
-                if not birthday_data:
-                    birthday_data = re.search(r"【生日】(.+)\n", base_story)
-                    birthday = f"{birthday_data.group(1)}" if birthday_data else ""
-                sex_data = re.search(r"【性别】(.+)\n", base_story)
-                sex = sex_data[1] if sex_data else ""
-                people_data = re.search(r"【种族】(.+)\n", base_story)
-                people = people_data[1] if people_data else ""
-                birthplace_data = re.search(r"【出身地】(.+)\n", base_story)
-                birthplace = birthplace_data[1] if birthplace_data else ""
-                birthplace_data = re.search(r"【产地】(.+)\n", base_story) if birthplace_data is None else None
-                birthplace2 = birthplace_data[1] if birthplace_data else ""
-                height_data = re.search(r"【身高】(.+)\n", base_story)
-                height = height_data[1] if height_data else ""
-                height_data = re.search(r"【高度】(.+)\n", base_story) if height_data is None else None
-                height2 = height_data[1] if height_data else ""
-                infection_status_data = re.search(r"【矿石病感染情况】\n(.+)", base_story)
-                infection_status = infection_status_data[1] if infection_status_data else ""
-                is_infection = "是" if "确认为感染者" in infection_status else "否"
-                experience_data = re.search(r"【(.*?)经验】(.+)\n", base_story)
-                experience = experience_data[2] if experience_data else ""
-                experience_name = (experience_data[1] + "经验") if experience_data else ""
-                design_sex_data = re.search(r"【设定性别】(.+)\n", base_story)
-                design_sex = design_sex_data[1] if design_sex_data else ""
-                weight_data = re.search(r"【重量】(.+)\n", base_story)
-                weight = weight_data[1] if weight_data else ""
-                repair_report_data = re.search(r"【维护检测报告】\n(.+)", base_story)
-                repair_report_data = re.search(r"【维护检测情况】\n(.+)", base_story) if repair_report_data is None else repair_report_data
-                repair_report = repair_report_data[1] if repair_report_data else ""
-                manufacturer_data = re.search(r"【制造商】(.+)\n", base_story)
-                manufacturer = manufacturer_data[1] if manufacturer_data else ""
-                produce_time_data = re.search(r"【出厂时间】(.+)\n", base_story)
-        if story_text["storyTitle"] == "客观履历":
-            raw_obj = safe_get_fn(story_text, ["stories", 0, "storyText"]) or ""
-            objective_eesume = process_description_fn(raw_obj, trait_candidates, rich_styles,term_description_dict)
-        if story_text["storyTitle"] == "综合体检测试":
-            test_story = safe_get_fn(story_text, ["stories", 0, "storyText"]) or ""
-            physic_intensity_data = re.search(r"【物理强度】(.+)\n", test_story)
-            physic_intensity = physic_intensity_data[1] if physic_intensity_data else ""
-            battlefield_flexible_data = re.search(r"【战场机动】(.+)\n", test_story)
-            battlefield_flexible = battlefield_flexible_data[1] if battlefield_flexible_data else ""
-            physiology_tolerance_data = re.search(r"【生理耐受】(.+)\n", test_story)
-            physiology_tolerance = physiology_tolerance_data[1] if physiology_tolerance_data else ""
-            tactic_plan_data = re.search(r"【战术规划】(.+)\n", test_story)
-            tactic_plan = tactic_plan_data[1] if tactic_plan_data else ""
-            battle_technic_data = re.search(r"【战斗技巧】(.+)\n", test_story)
-            battle_technic = battle_technic_data[1] if battle_technic_data else ""
-            source_stone_skill_adaptability_data = re.search(r"【源石技艺适应性】(.+)", test_story)
-            source_stone_skill_adaptability = source_stone_skill_adaptability_data[1] if source_stone_skill_adaptability_data else ""
-        if story_text["storyTitle"] == "临床诊断分析":
-            unlock_type = mapper.get_data_safe("handbook_info_table", "handbook_story_unlock_type", default=None)
-            story_txt = mapper.get_data_safe("handbook_info_table", "handbook_story_text", default="") or ""
-            unlock_param = mapper.get_data_safe("handbook_info_table", "handbook_story_unlock_param", default="") or ""
-            if unlock_type == "DIRECT":
-                diagnosis_analysis = story_txt.replace("\n", "<br/>")
-            elif unlock_type == "FAVOR":
-                diagnosis_analysis = story_txt.replace("\n", "<br/>")
+        raw_title = story_text.get("storyTitle") or ""
+        canon = _canonical_story_title(raw_title)
+        raw = safe_get_fn(story_text, ["stories", 0, "storyText"]) or ""
+
+        if canon == "基础档案":
+            if "【代号】" in raw or "【姓名】" in raw:
+                base_fields = parse_bracket_fields(raw)
+                profile = _apply_base_field_map(base_fields)
+
+                # 特殊：生日 / 出厂日（拆月日）
+                birthday_data = _DATE_BRACKET_RE.search(raw)
+                if birthday_data:
+                    label, mo, da = birthday_data.group(1), birthday_data.group(2), birthday_data.group(3)
+                    date_text = f"{mo}月{da}日"
+                    month, day = mo, da
+                    if label == "生日":
+                        profile["生日"] = date_text
+                    elif label == "出厂日":
+                        profile["出厂日"] = date_text
+                elif base_fields.get("生日"):
+                    profile["生日"] = base_fields["生日"]
+
+                # 特殊：感染情况（可能在下一行）+ 是否感染
+                infection = _bracket_value_or_next_line(raw, "矿石病感染情况", base_fields)
+                profile["矿石病毒感染情况"] = infection
+                is_infection = "是" if "确认为感染者" in infection else "否"
+
+                # 特殊：【xx经验】→ 经验 + 经验名称
+                experience_data = _EXPERIENCE_RE.search(raw)
+                if experience_data:
+                    profile["经验"] = experience_data.group(2).strip()
+                    profile["经验名称"] = experience_data.group(1) + "经验"
+
+                # 维护检测：同行空则取下一行
+                if not profile.get("维护检测报告"):
+                    for label in ("维护检测报告", "维护检测情况"):
+                        got = _bracket_value_or_next_line(raw, label, base_fields)
+                        if got:
+                            profile["维护检测报告"] = got
+                            break
+
+        elif canon in _BRACKET_SHEET_TITLES:
+            bracket_fields.update(parse_bracket_fields(raw))
+
+        elif canon == "临床诊断分析":
+            unlock_type = mapper.get_data_safe(
+                "handbook_info_table", "handbook_story_unlock_type", default=None
+            )
+            story_txt = (
+                mapper.get_data_safe("handbook_info_table", "handbook_story_text", default="")
+                or ""
+            )
+            unlock_param = (
+                mapper.get_data_safe(
+                    "handbook_info_table", "handbook_story_unlock_param", default=""
+                )
+                or ""
+            )
+            if unlock_type in ("DIRECT", "FAVOR"):
+                diagnosis = story_txt.replace("\n", "<br/>")
             elif unlock_type == "AWAKE":
                 parts_param = (unlock_param or "").split(";")
                 p0 = parts_param[0] if len(parts_param) > 0 else ""
                 p1 = parts_param[1] if len(parts_param) > 1 else ""
-                diagnosis_analysis = f"{p0}等级{p1}<br/>{story_txt.replace(chr(10), '<br/>')}"
+                diagnosis = f"{p0}等级{p1}<br/>{story_txt.replace(chr(10), '<br/>')}"
             else:
-                diagnosis_analysis = ""
-        if story_text["storyTitle"] == "档案资料一":
-            file_one = (safe_get_fn(story_text, ["stories", 0, "storyText"]) or "").replace("\n", "<br/>")
-        elif story_text["storyTitle"] == "档案资料二":
-            file_two = (safe_get_fn(story_text, ["stories", 0, "storyText"]) or "").replace("\n", "<br/>")
-        elif story_text["storyTitle"] == "档案资料三":
-            file_three = (safe_get_fn(story_text, ["stories", 0, "storyText"]) or "").replace("\n", "<br/>")
-        elif story_text["storyTitle"] == "档案资料四":
-            file_four = (safe_get_fn(story_text, ["stories", 0, "storyText"]) or "").replace("\n", "<br/>")
-        elif story_text["storyTitle"] == "晋升记录":
-            promotion_record = (safe_get_fn(story_text, ["stories", 0, "storyText"]) or "").replace("\n", "<br/>")
-        elif "升变档案" in story_text["storyTitle"]:
-            promotion_archive = (safe_get_fn(story_text, ["stories", 0, "storyText"]) or "").replace("\n", "<br/>")
-        if story_text["storyTitle"] == "综合性能检测结果":
-            performance_story = safe_get_fn(story_text, ["stories", 0, "storyText"]) or ""
-            maximum_speed_data = re.search(r"【最高速度】(.+)", performance_story)
-            maximum_speed = maximum_speed_data.group(1).strip() if maximum_speed_data else ""
-            hill_climbing_ability_data = re.search(r"【爬坡能力】(.+)", performance_story)
-            hill_climbing_ability = hill_climbing_ability_data.group(1).strip() if hill_climbing_ability_data else ""
-            braking_efficiency_data = re.search(r"【制动效能】(.+)", performance_story)
-            braking_efficiency = braking_efficiency_data.group(1).strip() if braking_efficiency_data else ""
-            pass_rate_data = re.search(r"【通过性】(.+)", performance_story)
-            pass_rate = pass_rate_data.group(1).strip() if pass_rate_data else ""
-            endurance_data = re.search(r"【续航】(.+)", performance_story)
-            endurance = endurance_data.group(1).strip() if endurance_data else ""
-            structural_stability_data = re.search(r"【结构稳定性】(.+)", performance_story)
-            structural_stability = structural_stability_data.group(1).strip() if structural_stability_data else ""
+                diagnosis = ""
+            story_text_fields[raw_title] = diagnosis
+
+        elif canon in _PLAIN_STORY_TITLES or "升变档案" in raw_title:
+            story_text_fields[raw_title] = raw.replace("\n", "<br/>").replace("{@nickname}","博士")
+
+        else:
+            # 未登记标题：综合能力测试等 →【】表；其余 → 整段纯文本
+            if not raw_title:
+                continue
+            fields = parse_bracket_fields(raw)
+            if _looks_like_bracket_sheet(raw_title, fields):
+                bracket_fields.update(fields)
+            else:
+                story_text_fields[raw_title] = raw.replace("\n", "<br/>")
 
     secret_record = []
     for i in range(1, 4):
         secret_record.append(
             [
                 safe_get_fn(char_text, ["handbookAvgList", i - 1, "storySetName"]),
-                safe_get_fn(char_text, ["handbookAvgList", i - 1, "unlockParam", 0, "unlockParam1"]),
-                safe_get_fn(char_text, ["handbookAvgList", i - 1, "unlockParam", 0, "unlockParam1"]),
-                safe_get_fn(char_text, ["handbookAvgList", i - 1, "unlockParam", 0, "unlockParam2"]),
-                safe_get_fn(char_text, ["handbookAvgList", i - 1, "unlockParam", 1, "unlockParam1"]),
+                safe_get_fn(
+                    char_text, ["handbookAvgList", i - 1, "unlockParam", 0, "unlockParam1"]
+                ),
+                safe_get_fn(
+                    char_text, ["handbookAvgList", i - 1, "unlockParam", 0, "unlockParam1"]
+                ),
+                safe_get_fn(
+                    char_text, ["handbookAvgList", i - 1, "unlockParam", 0, "unlockParam2"]
+                ),
+                safe_get_fn(
+                    char_text, ["handbookAvgList", i - 1, "unlockParam", 1, "unlockParam1"]
+                ),
                 safe_get_fn(char_text, ["handbookAvgList", i - 1, "avgList", 0, "storyIntro"]),
             ]
         )
 
-    lines.append(f"|生日={birthday}")
-    lines.append(f"|出厂日={birthday2}")
+    p = profile  # 基础档案 Wiki 字段
+    lines.append(f"|生日={p.get('生日', '')}")
+    lines.append(f"|出厂日={p.get('出厂日', '')}")
+    lines.append(f"|入学年级={p.get('入学年级', '')}")
     lines.append(f"|月={month}")
     lines.append(f"|日={day}")
-    lines.append(f"|性别={sex}")
+    lines.append(f"|性别={p.get('性别', '')}")
     lines.append("|真实姓名=")
     lines.append("|职能=")
-    lines.append(f"|种族={people}")
-    lines.append(f"|出身={birthplace}")
-    lines.append(f"|身高={height}")
-    lines.append(f"|高度={height2}")
+    lines.append(f"|种族={p.get('种族', '')}")
+    lines.append(f"|出身={p.get('出身', '')}")
+    lines.append(f"|身高={p.get('身高', '')}")
+    lines.append(f"|高度={p.get('高度', '')}")
     lines.append(f"|是否感染={is_infection}")
-    lines.append(f"|设定性别={_wiki_text_field(design_sex)}")
+    lines.append(f"|设定性别={_wiki_text_field(p.get('设定性别', ''))}")
     spec = _wiki_text_field(value.get("专精", ""))
     lines.append(f"|专精={spec}")
-    lines.append(f"|经验={_wiki_text_field(experience)}<!--类似十年这样的文本-->")
-    lines.append(f"|经验名称={_wiki_text_field(experience_name)}<!--不填写即显示战斗经验-->")
-    lines.append(f"|制造商={manufacturer}")
-    lines.append(f"|产地={birthplace2}")
-    lines.append(f"|出厂时间={produce_time}")
-    lines.append(f"|重量={weight}")
-    lines.append(f"|维护检测报告={repair_report}")
-    lines.append(f"|矿石病毒感染情况={infection_status}")
-    lines.append(f"|客观履历={objective_eesume}")
-    lines.append(f"|物理强度={physic_intensity}")
-    lines.append(f"|战场机动={battlefield_flexible}")
-    lines.append(f"|生理耐受={physiology_tolerance}")
-    lines.append(f"|战术规划={tactic_plan}")
-    lines.append(f"|战斗技巧={battle_technic}")
-    lines.append(f"|源石技艺适应性={source_stone_skill_adaptability}")
-    lines.append(f"|临床诊断分析={diagnosis_analysis}")
-    lines.append(f"|档案资料一={file_one}")
-    lines.append(f"|档案资料二={file_two}")
-    lines.append(f"|档案资料三={file_three}")
-    lines.append(f"|档案资料四={file_four}")
-    lines.append(f"|升变档案={promotion_archive}")
-    lines.append(f"|晋升记录={promotion_record}")
+    lines.append(f"|经验={_wiki_text_field(p.get('经验', ''))}<!--类似十年这样的文本-->")
+    lines.append(
+        f"|经验名称={_wiki_text_field(p.get('经验名称', ''))}<!--不填写即显示战斗经验-->"
+    )
+    lines.append(f"|制造商={p.get('制造商', '')}")
+    lines.append(f"|产地={p.get('产地', '')}")
+    lines.append(f"|出厂时间={p.get('出厂时间', '')}")
+    lines.append(f"|重量={p.get('重量', '')}")
+    lines.append(f"|维护检测报告={p.get('维护检测报告', '')}")
+    lines.append(f"|矿石病毒感染情况={p.get('矿石病毒感染情况', '')}")
+    for key, val in bracket_fields.items():
+        lines.append(f"|{key}={val}")
+    for title, text in story_text_fields.items():
+        lines.append(f"|{title}={text}")
+    # 档案资料五仍来自 item「宣传介绍」，不是 handbook story
     promo5 = _wiki_text_field(value.get("宣传介绍", ""))
     lines.append(f"|档案资料五={promo5}")
     lines.append("|档案资料五标题=宣传介绍")
-    lines.append(f"|最高速度={maximum_speed if maximum_speed else ''}")
-    lines.append(f"|爬坡能力={hill_climbing_ability if hill_climbing_ability else ''}")
-    lines.append(f"|制动效能={braking_efficiency if braking_efficiency else ''}")
-    lines.append(f"|通过性={pass_rate if pass_rate else ''}")
-    lines.append(f"|续航={endurance if endurance else ''}")
-    lines.append(f"|结构稳定性={structural_stability if structural_stability else ''}")
     lines.append("|体检描述=")
     for i in range(1, 4):
         rec = secret_record[i - 1]
@@ -249,4 +291,7 @@ def render_operator_dossier_fields(
     return lines
 
 
-__all__ = ["render_operator_dossier_fields"]
+__all__ = [
+    "parse_bracket_fields",
+    "render_operator_dossier_fields",
+]

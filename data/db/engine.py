@@ -63,7 +63,6 @@ def is_database_enabled(config: dict) -> bool:
 def _resolve_sqlite_url(url: str, *, config_path: str | Path | None) -> str:
     if not url.startswith("sqlite:///"):
         return url
-    # 已是绝对路径（sqlite:////C:/... 或 sqlite:////tmp/x.db）
     if url.startswith("sqlite:////"):
         return url
     rel = url[len("sqlite:///") :]

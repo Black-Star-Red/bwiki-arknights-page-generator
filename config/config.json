@@ -14,12 +14,14 @@
   "data_source_roots": {
     "Kengxxiao/ArknightsGameData": "../ArknightsData/Kengxxiao.ArknightsGameData",
     "yuanyan3060/ArknightsGameResource": "../ArknightsData/yuanyan3060.ArknightsGameResource",
-    "ArknightsAssets/ArknightsGamedata": "../ArknightsData/ArknightsAssets.ArknightsGamedata"
+    "ArknightsAssets/ArknightsGamedata": "../ArknightsData/ArknightsAssets.ArknightsGamedata",
+    "Black-star/ArknightsGameData": "../Arknights_FBS/output/dyn"
   },
   "$include": [
     "data_sources/Kengxxiao.ArknightsGameData.json",
     "data_sources/yuanyan3060.ArknightsGameResource.json",
-    "data_sources/ArknightsAssets.ArknightsGamedata.json"
+    "data_sources/ArknightsAssets.ArknightsGamedata.json",
+    "data_sources/Black-star.ArknightsGameData.json"
   ],
   "database": {
     "enabled": false,

@@ -171,7 +171,8 @@ def process_description(desc, trait_candidates, rich_styles, termDescriptionDict
             result_chars.append(ch)
             i += 1
 
-    return "".join(result_chars).replace(r"\n","<br/>")
+    # 游戏文案多为真实换行；少数源会残留字面量 \n
+    return "".join(result_chars).replace("\n", "<br/>").replace(r"\n", "<br/>")
 
 
 __all__ = ["process_description"]

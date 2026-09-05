@@ -1,0 +1,389 @@
+{
+    "data_sources":{
+        "Black-star/ArknightsGameData": [
+        {
+            "id": "character_table",
+            "type": "json",
+            "config": {
+            "file_path": "gamedata/excel/character_table.json",
+            "unpack_keys": false,
+            "encoding": "utf-8"
+            },
+            "field_mappings": {
+            "charIdS": "forKey",
+            "currentCharId": "",
+            "name": "{currentCharId}.name",
+            "appellation": "{currentCharId}.appellation",
+            "description": "{currentCharId}.description",
+            "profession": "{currentCharId}.profession",
+            "rarity": "{currentCharId}.rarity[-1:]",
+            "material_rarity": "{currentCharId}.rarity",
+            "mainPower": "{currentCharId}.mainPower",
+            "subPower": "{currentCharId}.subPower",
+            "position": "{currentCharId}.position",
+            "phases": "{currentCharId}.phases",
+            "skills": "{currentCharId}.skills",
+            "talents": "{currentCharId}.talents",
+            "talent_group_index": "",
+            "talent_candidate_index": "",
+            "talent_name": "{currentCharId}.talents[{talent_group_index}].candidates[{talent_candidate_index}].name",
+            "talent_phase": "{currentCharId}.talents[{talent_group_index}].candidates[{talent_candidate_index}].unlockCondition.phase",
+            "talent_required_potential": "{currentCharId}.talents[{talent_group_index}].candidates[{talent_candidate_index}].requiredPotentialRank",
+            "talent_description": "{currentCharId}.talents[{talent_group_index}].candidates[{talent_candidate_index}].description",
+            "favorKeyFrames": "{currentCharId}.favorKeyFrames",
+            "allSkillLvlup": "{currentCharId}.allSkillLvlup",
+            "potentialRanks": "{currentCharId}.potentialRanks",
+            "displayNumber": "{currentCharId}.displayNumber",
+            "tokenKey": "{currentCharId}.tokenKey",
+            "subProfessionId": "{currentCharId}.subProfessionId",
+            "maxPotentialLevel": "{currentCharId}.maxPotentialLevel",
+            "nationId": "{currentCharId}.nationId",
+            "groupId": "{currentCharId}.groupId",
+            "teamId": "{currentCharId}.teamId",
+            "tagList": "{currentCharId}.tagList",
+            "itemUsage": "{currentCharId}.itemUsage",
+            "itemDesc": "{currentCharId}.itemDesc",
+            "itemObtainApproach": "{currentCharId}.itemObtainApproach",
+            "isNotObtainable": "{currentCharId}.isNotObtainable",
+            "isSpChar": "{currentCharId}.isSpChar",
+            "maxLevel": "{currentCharId}.maxLevel",
+            "trait": "{currentCharId}.trait",
+            "rangeId": "{phases}[*].rangeId",
+            "attributesKeyFrames": "{phases}[*].attributesKeyFrames",
+            "potentialItemId": "{currentCharId}.potentialItemId",
+            "skill_level_up_cost_cond": "{skills}[*].levelUpCostCond",
+            "skill_index": "",
+            "skill_id": "{skills}[{skill_index}].skillId",
+            "skill_override_token_key": "{skills}[{skill_index}].overrideTokenKey",
+            "talent_candidates": "{talents}[*].candidates",
+            "favor_keyframe_data": "{favorKeyFrames}[1].data",
+            "phase0_attr_data": "{phases}[0].attributesKeyFrames[0].data",
+            "phase0_attr_max_data": "{phases}[0].attributesKeyFrames[1].data",
+            "phase1_attr_max_data": "{phases}[1].attributesKeyFrames[1].data",
+            "phase2_attr_max_data": "{phases}[2].attributesKeyFrames[1].data",
+            "phase_attr_max_data_list": "{phases}[*].attributesKeyFrames[1].data",
+            "phase0_max_level": "{phases}[0].maxLevel",
+            "phase1_max_level": "{phases}[1].maxLevel",
+            "phase2_range_id": "{phases}[2].rangeId",
+            "operator_id": "",
+            "operator_name": "{operator_id}.name",
+            "operator_appellation": "{operator_id}.appellation",
+            "operator_description": "{operator_id}.description",
+            "operator_position": "{operator_id}.position",
+            "operator_phases": "{operator_id}.phases",
+            "operator_talents": "{operator_id}.talents",
+            "operator_skills": "{operator_id}.skills",
+            "phase_index": "",
+            "keyframe_index": "",
+            "phase_attr_keyframe_data": "{phases}[{phase_index}].attributesKeyFrames[{keyframe_index}].data",
+            "phase_max_level_at": "{phases}[{phase_index}].maxLevel",
+            "phase_range_id_at": "{phases}[{phase_index}].rangeId",
+            "operator_phase_attr_data": "{operator_id}.phases[{phase_index}].attributesKeyFrames[{keyframe_index}].data",
+            "operator_phase_range_id": "{operator_id}.phases[{phase_index}].rangeId",
+            "operator_talent_candidates": "{operator_id}.talents[{talent_group_index}].candidates",
+            "operator_skill_id": "{operator_id}.skills[{skill_index}].skillId"
+            },
+            "value_maps": {
+                "phase": {
+                    "0": "PHASE_0",
+                    "1": "PHASE_1",
+                    "2": "PHASE_2",
+                    "PHASE_0": "PHASE_0",
+                    "PHASE_1": "PHASE_1",
+                    "PHASE_2": "PHASE_2"
+                },
+                "phase_label": {
+                    "0": "精英化0",
+                    "1": "精英化1",
+                    "2": "精英化2",
+                    "PHASE_0": "精英化0",
+                    "PHASE_1": "精英化1",
+                    "PHASE_2": "精英化2"
+                },
+                "profession": {
+                    "CASTER": "术师",
+                    "MEDIC": "医疗",
+                    "PIONEER": "先锋",
+                    "SNIPER": "狙击",
+                    "SPECIAL": "特种",
+                    "SUPPORT": "辅助",
+                    "TANK": "重装",
+                    "WARRIOR": "近卫"
+                },
+                "position": {
+                    "RANGED": "远程位",
+                    "MELEE": "近战位",
+                    "ALL": "全部位"
+                },
+                "operator_position": {
+                    "RANGED": "远程位",
+                    "MELEE": "近战位",
+                    "ALL": "全部位"
+                },
+                "material_rarity": {
+                    "TIER_1": "0",
+                    "TIER_2": "1",
+                    "TIER_3": "2",
+                    "TIER_4": "3",
+                    "TIER_5": "4",
+                    "TIER_6": "5"
+                }
+            },
+            "field_meta": {
+                "currentCharId": { "kind": "var", "type": "string", "required": true },
+                "charIdS": { "path": "charIdS", "type": "list[string]", "required": true },
+                "rarity": { "path": "rarity", "type": "string", "required": true },
+                "talent_phase": {
+                    "path": "talent_phase",
+                    "type": "string",
+                    "enum": ["PHASE_0", "PHASE_1", "PHASE_2"]
+                }
+            }
+        },
+        {
+            "id": "handbook_team_table",
+            "type": "json",
+            "config": {
+            "file_path": "gamedata/excel/handbook_team_table.json",
+            "encoding": "utf-8"
+            },
+            "field_mappings": {
+            "teams": "teams",
+            "nations": "nations",
+            "factions": "factions",
+            "power_id": "",
+            "power_name": "{power_id}.powerName"
+            }
+        },
+        {
+            "id": "gamedata_const",
+            "type": "json",
+            "config": {
+            "file_path": "gamedata/excel/gamedata_const.json",
+            "encoding": "utf-8"
+            },
+            "field_mappings": {
+            "richTextStyles": "richTextStyles",
+            "termDescriptionDict": "termDescriptionDict",
+            "gacha": "gacha",
+            "characterExpMap": "characterExpMap",
+            "skillExpMap": "skillExpMap"
+            }
+        },
+        {
+            "id": "uniequip_table",
+            "type": "json",
+            "config": {
+            "file_path": "gamedata/excel/uniequip_table.json",
+            "encoding": "utf-8"
+            },
+            "field_mappings": {
+            "equipDict": "equipDict",
+            "missionList": "missionList",
+            "subProfDict": "subProfDict",
+            "subProfessionId": "",
+            "sub_profession_name": "subProfDict.{subProfessionId}.subProfessionName"
+            }
+        },
+        {
+            "id": "skill_table",
+            "type": "json",
+            "config": {
+            "file_path": "gamedata/excel/skill_table.json",
+            "encoding": "utf-8"
+            },
+            "field_mappings": {
+            "levels": "levels",
+            "skill_name": "levels[0].name",
+            "skill_description": "levels[0].description",
+            "skill_icon": "iconId",
+            "skill_type": "skillType",
+            "skill_trigger_type": "levels[0].skillType",
+            "sp_type": "spData.spType",
+            "sp_cost": "spData.spCost",
+            "duration": "duration",
+            "max_charge_time": "spData.maxChargeTime",
+            "increment": "spData.increment",
+            "skill_id": "",
+            "skill_levels": "{skill_id}.levels"
+            },
+            "value_maps": {
+            "sp_type": {
+                "INCREASE_WITH_TIME": "自动回复",
+                "INCREASE_WHEN_ATTACK": "攻击回复",
+                "INCREASE_WHEN_TAKEN_DAMAGE": "受击回复",
+                "1": "自动回复",
+                "2": "攻击回复",
+                "4": "受击回复",
+                "8": "被动"
+            },
+            "skill_trigger_type": {
+                "PASSIVE": "被动",
+                "MANUAL": "手动触发",
+                "AUTO": "自动触发",
+                "0": "被动",
+                "1": "手动触发",
+                "2": "自动触发"
+            }
+            }
+        },
+        {
+            "id": "item_table",
+            "type": "json",
+            "config": {
+            "file_path": "gamedata/excel/item_table.json",
+            "encoding": "utf-8"
+            },
+            "field_mappings": {
+            "items": "items",
+            "item_id": "",
+            "item_name": "items.{item_id}.name",
+            "item_description": "items.{item_id}.description",
+            "item_rarity": "items.{item_id}.rarity",
+            "item_icon": "items.{item_id}.iconId",
+            "item_usage": "items.{item_id}.usage",
+            "item_type": "items.{item_id}.itemType",
+            "item_obtain_approach": "items.{item_id}.obtainApproach",
+            "classify_type": "items.{item_id}.classifyType",
+            "stage_drop_list": "items.{item_id}.stageDropList"
+            },
+            "value_maps": {
+                "item_rarity": {
+                    "TIER_1": "0",
+                    "TIER_2": "2",
+                    "TIER_3": "3",
+                    "TIER_4": "3",
+                    "TIER_5": "4",
+                    "TIER_6": "5"
+                },
+                "classify_type": {
+                    "MATERIAL": "M",
+                    "NORMAL": "N",
+                    "CONSUME": "C"
+                }
+            }
+        },
+        {
+            "id": "building_data",
+            "type": "json",
+            "config": {
+            "file_path": "gamedata/excel/building_data.json",
+            "encoding": "utf-8"
+            },
+            "field_mappings": {
+            "chars": "chars",
+            "buffChar": "buffChar",
+            "buffs": "buffs",
+            "workshopFormulas": "workshopFormulas",
+            "manufactFormulas": "manufactFormulas",
+            "char_id": "",
+            "buff_char_index": "",
+            "buff_data_index": "",
+            "buff_id": "",
+            "skillIcon": "buffs.{buff_id}.skillIcon",
+            "char_buff_data": "chars.{char_id}.buffChar[{buff_char_index}].buffData",
+            "buff_name": "buffs.{buff_id}.buffName",
+            "buff_room_type": "buffs.{buff_id}.roomType",
+            "buff_description": "buffs.{buff_id}.description",
+            "buff_icon": "buffs.{buff_id}.buffIcon",
+            "buff_cond_phase": "chars.{char_id}.buffChar[{buff_char_index}].buffData[{buff_data_index}].cond.phase",
+            "buff_cond_level": "chars.{char_id}.buffChar[{buff_char_index}].buffData[{buff_data_index}].cond.level"
+            },
+            "value_maps": {
+                "phase": {
+                    "0": "精英化0",
+                    "1": "精英化1",
+                    "2": "精英化2",
+                    "PHASE_0": "精英化0",
+                    "PHASE_1": "精英化1",
+                    "PHASE_2": "精英化2"
+                }
+            }
+        },
+        {
+            "id": "skin_table",
+            "type": "json",
+            "config": {
+            "file_path": "gamedata/excel/skin_table.json",
+            "encoding": "utf-8"
+            },
+            "field_mappings": {
+            "charSkins": "charSkins",
+            "buildinEvolveMap": "buildinEvolveMap",
+            "buildinPatchMap": "buildinPatchMap"
+            }
+        },
+        {
+            "id": "handbook_info_table",
+            "type": "json",
+            "config": {
+            "file_path": "gamedata/excel/handbook_info_table.json",
+            "encoding": "utf-8"
+            },
+            "field_mappings": {
+            "handbookDict": "handbookDict",
+            "handbookDisplayConditions": "handbookDisplayConditions",
+            "handbookStageData": "handbookStageData",
+            "handbook_char_id": "",
+            "handbook_dict_entry": "handbookDict.{handbook_char_id}",
+            "handbook_story_index": "",
+            "handbook_story_unlock_type": "handbookDict.{handbook_char_id}.storyTextAudio[{handbook_story_index}].stories[0].unLockType",
+            "handbook_story_text": "handbookDict.{handbook_char_id}.storyTextAudio[{handbook_story_index}].stories[0].storyText",
+            "handbook_story_unlock_param": "handbookDict.{handbook_char_id}.storyTextAudio[{handbook_story_index}].stories[0].unLockParam"
+            },
+            "value_maps": {
+            "handbook_story_unlock_type": {
+                "1": "DIRECT",
+                "2": "FAVOR",
+                "3": "AWAKE"
+            }
+            }
+        },
+        {
+            "id": "charword_table",
+            "type": "json",
+            "config": {
+            "file_path": "gamedata/excel/charword_table.json",
+            "encoding": "utf-8"
+            },
+            "field_mappings": {
+            "charWords": "charWords",
+            "voiceLangDict": "voiceLangDict",
+            "wordlists": "wordlists",
+            "char_id": "",
+            "voice_lang_dict": "voiceLangDict.{char_id}.dict",
+            "voice_key": "",
+            "voice_text": "charWords.{voice_key}.voiceText"
+            }
+        },
+        {
+            "id": "char_meta_table",
+            "type": "json",
+            "config": {
+            "file_path": "gamedata/excel/char_meta_table.json",
+            "encoding": "utf-8"
+            },
+            "field_mappings": {
+            "spCharGroups": "spCharGroups"
+            }
+        },
+        {
+            "id": "activity_table",
+            "type": "json",
+            "config": {
+            "file_path": "gamedata/excel/activity_table.json",
+            "encoding": "utf-8"
+            },
+            "field_mappings": {
+            "basicInfo": "basicInfo",
+            "activity_id": "",
+            "activity_name": "basicInfo.{activity_id}.name",
+            "activity_type": "basicInfo.{activity_id}.type",
+            "activity_start_time": "basicInfo.{activity_id}.startTime",
+            "activity_end_time": "basicInfo.{activity_id}.endTime",
+            "activity_reward_end_time": "basicInfo.{activity_id}.rewardEndTime"
+            }
+        }
+        ]
+    }
+}
