@@ -12,16 +12,16 @@
     }
   },
   "data_source_roots": {
+    "Black-star/ArknightsGameData": "../ArknightsData/Black-Star.ArknightsGameData",
     "Kengxxiao/ArknightsGameData": "../ArknightsData/Kengxxiao.ArknightsGameData",
     "yuanyan3060/ArknightsGameResource": "../ArknightsData/yuanyan3060.ArknightsGameResource",
-    "ArknightsAssets/ArknightsGamedata": "../ArknightsData/ArknightsAssets.ArknightsGamedata",
-    "Black-star/ArknightsGameData": "../Arknights_FBS/output/dyn"
+    "ArknightsAssets/ArknightsGamedata": "../ArknightsData/ArknightsAssets.ArknightsGamedata"
   },
   "$include": [
+    "data_sources/Black-star.ArknightsGameData.json",
     "data_sources/Kengxxiao.ArknightsGameData.json",
     "data_sources/yuanyan3060.ArknightsGameResource.json",
-    "data_sources/ArknightsAssets.ArknightsGamedata.json",
-    "data_sources/Black-star.ArknightsGameData.json"
+    "data_sources/ArknightsAssets.ArknightsGamedata.json"
   ],
   "database": {
     "enabled": false,

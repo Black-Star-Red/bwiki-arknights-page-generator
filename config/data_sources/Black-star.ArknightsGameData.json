@@ -5,7 +5,7 @@
             "id": "character_table",
             "type": "json",
             "config": {
-            "file_path": "gamedata/excel/character_table.json",
+            "file_path": "excel/character_table.json",
             "unpack_keys": false,
             "encoding": "utf-8"
             },
@@ -144,7 +144,7 @@
             "id": "handbook_team_table",
             "type": "json",
             "config": {
-            "file_path": "gamedata/excel/handbook_team_table.json",
+            "file_path": "excel/handbook_team_table.json",
             "encoding": "utf-8"
             },
             "field_mappings": {
@@ -159,7 +159,7 @@
             "id": "gamedata_const",
             "type": "json",
             "config": {
-            "file_path": "gamedata/excel/gamedata_const.json",
+            "file_path": "excel/gamedata_const.json",
             "encoding": "utf-8"
             },
             "field_mappings": {
@@ -174,7 +174,7 @@
             "id": "uniequip_table",
             "type": "json",
             "config": {
-            "file_path": "gamedata/excel/uniequip_table.json",
+            "file_path": "excel/uniequip_table.json",
             "encoding": "utf-8"
             },
             "field_mappings": {
@@ -189,7 +189,7 @@
             "id": "skill_table",
             "type": "json",
             "config": {
-            "file_path": "gamedata/excel/skill_table.json",
+            "file_path": "excel/skill_table.json",
             "encoding": "utf-8"
             },
             "field_mappings": {
@@ -231,7 +231,7 @@
             "id": "item_table",
             "type": "json",
             "config": {
-            "file_path": "gamedata/excel/item_table.json",
+            "file_path": "excel/item_table.json",
             "encoding": "utf-8"
             },
             "field_mappings": {
@@ -267,7 +267,7 @@
             "id": "building_data",
             "type": "json",
             "config": {
-            "file_path": "gamedata/excel/building_data.json",
+            "file_path": "excel/building_data.json",
             "encoding": "utf-8"
             },
             "field_mappings": {
@@ -304,7 +304,7 @@
             "id": "skin_table",
             "type": "json",
             "config": {
-            "file_path": "gamedata/excel/skin_table.json",
+            "file_path": "excel/skin_table.json",
             "encoding": "utf-8"
             },
             "field_mappings": {
@@ -317,7 +317,7 @@
             "id": "handbook_info_table",
             "type": "json",
             "config": {
-            "file_path": "gamedata/excel/handbook_info_table.json",
+            "file_path": "excel/handbook_info_table.json",
             "encoding": "utf-8"
             },
             "field_mappings": {
@@ -343,7 +343,7 @@
             "id": "charword_table",
             "type": "json",
             "config": {
-            "file_path": "gamedata/excel/charword_table.json",
+            "file_path": "excel/charword_table.json",
             "encoding": "utf-8"
             },
             "field_mappings": {
@@ -360,7 +360,7 @@
             "id": "char_meta_table",
             "type": "json",
             "config": {
-            "file_path": "gamedata/excel/char_meta_table.json",
+            "file_path": "excel/char_meta_table.json",
             "encoding": "utf-8"
             },
             "field_mappings": {
@@ -371,7 +371,7 @@
             "id": "activity_table",
             "type": "json",
             "config": {
-            "file_path": "gamedata/excel/activity_table.json",
+            "file_path": "excel/activity_table.json",
             "encoding": "utf-8"
             },
             "field_mappings": {

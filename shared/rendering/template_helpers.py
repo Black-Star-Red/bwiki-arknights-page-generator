@@ -45,20 +45,21 @@ def build_drawer_from_skins(mapper, char_id):
     drawer = ""
     char_skins = mapper.get_data_safe("skin_table", "charSkins") or {}
     for _, skin_value in char_skins.items():
-        if char_id == skin_value["charId"] and skin_value["displaySkin"]["skinGroupId"] == "ILLUST_0":
-            for i in skin_value["displaySkin"]["drawerList"]:
-                if "、" in i:
-                    for j in list(filter(lambda s: s.strip() != "", i.split("、"))):
-                        drawer += j + "、"
-                else:
-                    drawer += i + "、"
-            if skin_value["displaySkin"]["designerList"] and len(skin_value["displaySkin"]["designerList"]) > 0:
-                for i in skin_value["displaySkin"]["designerList"]:
-                    if "、" in i:
-                        for j in list(filter(lambda s: s.strip() != "", i.split("、"))):
-                            drawer += j + "（原案）、"
-                    else:
-                        drawer += i + "（原案）、"
+        display = skin_value.get("displaySkin") or {}
+        if char_id != skin_value.get("charId") or display.get("skinGroupId") != "ILLUST_0":
+            continue
+        for i in display.get("drawerList") or []:
+            if "、" in i:
+                for j in list(filter(lambda s: s.strip() != "", i.split("、"))):
+                    drawer += j + "、"
+            else:
+                drawer += i + "、"
+        for i in display.get("designerList") or []:
+            if "、" in i:
+                for j in list(filter(lambda s: s.strip() != "", i.split("、"))):
+                    drawer += j + "（原案）、"
+            else:
+                drawer += i + "（原案）、"
     if drawer.endswith("、"):
         drawer = drawer[:-1]
     return drawer

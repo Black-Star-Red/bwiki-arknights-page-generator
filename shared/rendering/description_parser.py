@@ -39,12 +39,45 @@ def _resolve_term_index_maps(term_description_dict, term_index_cache):
     return tag_to_name, tag_to_index
 
 
+def _parse_placeholder_key(key_expr: str) -> tuple[str, bool]:
+    """解析 `{key}` / `{-key}`：返回 (blackboard键, 是否取相反数)。"""
+    key = key_expr or ""
+    negate = key.startswith("-")
+    if negate:
+        key = key[1:]
+    return key, negate
+
+
+def _lookup_blackboard_number(map_data: dict, key_expr: str):
+    """从 blackboard 取值；支持前导 ``-`` 表示显示取反。缺失返回 None。"""
+    key, negate = _parse_placeholder_key(key_expr)
+    if key not in map_data:
+        return None
+    val = map_data[key]
+    if negate:
+        val = -val
+    return val
+
+
+def _format_blackboard_number(val, *, as_percent: bool) -> str:
+    if as_percent:
+        data = val * 100
+        rounded = round(data)
+        if abs(data - rounded) < 1e-10:
+            data = int(rounded)
+        return f"{data}%"
+    if hasattr(val, "is_integer") and val.is_integer():
+        val = int(val)
+    return f"{val}"
+
+
 def process_description(desc, trait_candidates, rich_styles, termDescriptionDict, blackboard=None, term_index_cache=None):
     """
         将明日方舟的富文本描述解析为维基模板文本。
 
         注意事项：
-        - `blackboard` 是可选的，用于 `{key}` / `{key:0%}` 替换。
+        - `blackboard` 是可选的，用于 `{key}` / `{key:0%}` / `{-key:0%}` 替换。
+          前导 ``-`` 表示对 blackboard 值取反后再显示（如虚弱 Debuff）。
     """
     result_chars = []
     stack = []
@@ -104,21 +137,22 @@ def process_description(desc, trait_candidates, rich_styles, termDescriptionDict
                         key_part = inner[left_brace + 1 : right_brace]
                         colon = key_part.find(":")
                         if colon == -1:
-                            key = key_part
+                            key_expr = key_part
                             is_percent = False
                         else:
-                            key = key_part[:colon]
+                            key_expr = key_part[:colon]
                             is_percent = True
+                        key, negate = _parse_placeholder_key(key_expr)
                         values = []
                         for cand in trait_candidates:
                             for board in cand.get("blackboard", []):
                                 if board.get("key") == key:
                                     val = board.get("value")
                                     if val is not None:
-                                        values.append(val)
+                                        values.append(-val if negate else val)
                                     break
                         if not values:
-                            value_str = key
+                            value_str = key_expr
                         elif is_percent:
                             value_str = str(int(values[-1] * 100)) + "%"
                         else:
@@ -153,17 +187,15 @@ def process_description(desc, trait_candidates, rich_styles, termDescriptionDict
             if end != -1:
                 data = desc[i + 1 : end]
                 i = end
-                if data.endswith(":0%"):
-                    data = map_data[data[:-3]] * 100
-                    rounded = round(data)
-                    if abs(data - rounded) < 1e-10:
-                        data = int(rounded)
-                    result_chars.append(f"{data}%")
+                as_percent = data.endswith(":0%")
+                key_expr = data[:-3] if as_percent else data
+                val = _lookup_blackboard_number(map_data, key_expr)
+                if val is None:
+                    result_chars.append("{" + data + "}")
                 else:
-                    data = map_data[data]
-                    if data.is_integer():
-                        data = int(data)
-                    result_chars.append(f"{data}")
+                    result_chars.append(
+                        _format_blackboard_number(val, as_percent=as_percent)
+                    )
             else:
                 result_chars.append(ch)
             i += 1

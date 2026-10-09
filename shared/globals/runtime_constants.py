@@ -21,6 +21,7 @@ INFRASTRUCTURE_ROOM = {
     "DORMITORY": "宿舍",
     "HIRE": "办公室",
     "MEETING": "会客室",
+    "RECYCLE": "回收站",
 }
 
 # Keep legacy behavior as default while allowing config override.
